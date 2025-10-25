@@ -11,3 +11,5 @@ opencv-python==4.9.0.80
 flash-attn==2.7.4.post1
 streamlit==1.50.0
 pyarrow==20.0.0
+imageio==2.37.0
+imageio-ffmpeg==0.6.0
