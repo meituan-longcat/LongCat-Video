@@ -31,6 +31,12 @@ We introduce LongCat-Video, a foundational video generation model with 13.6B par
 
 For more detail, please refer to the comprehensive [***LongCat-Video Technical Report***](https://github.com/meituan-longcat/LongCat-Video/blob/main/longcatvideo_tech_report.pdf).
 
+## 🎥 Teaser Video
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/00fa63f0-9c4e-461a-a79e-c662ad596d7d" width="2264" height="384"> </video>
+</div>
+
 ## Quick Start
 
 ### Installation
