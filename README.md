@@ -51,6 +51,20 @@ cd LongCat-Video
 Install dependencies:
 
 ```shell
+# create conda environment
+conda create -n longcat-video python=3.10
+conda activate longcat-video
+
+# install torch (configure according to your CUDA version)
+pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+
+# install flash-attn-2
+pip install ninja 
+pip install psutil 
+pip install packaging 
+pip install flash_attn==2.7.4.post1
+
+# install other requirements
 pip install -r requirements.txt
 ```
 
@@ -128,10 +142,10 @@ The *Text-to-Video* MOS evaluation results on our internal benchmark.
 | **Architecture** | - | - | MoE | Dense |
 | **# Total Params** | - | - | 28B | 13.6B |
 | **# Activated Params** | - | - | 14B | 13.6B |
-| Text-Alignment | 3.99 | 3.81 | 3.70 | 3.76 |
-| Visual Quality | 3.23 | 3.13 | 3.26 | 3.25 |
-| Motion Quality | 3.86 | 3.81 | 3.78 | 3.74 |
-| Overall Quality | 3.48 | 3.36 | 3.35 | 3.38 |
+| Text-Alignment↑ | 3.99 | 3.81 | 3.70 | 3.76 |
+| Visual Quality↑ | 3.23 | 3.13 | 3.26 | 3.25 |
+| Motion Quality↑ | 3.86 | 3.81 | 3.78 | 3.74 |
+| Overall Quality↑ | 3.48 | 3.36 | 3.35 | 3.38 |
 
 ### Image-to-Video
 The *Image-to-Video* MOS evaluation results on our internal benchmark.
@@ -142,11 +156,11 @@ The *Image-to-Video* MOS evaluation results on our internal benchmark.
 | **Architecture** | - | - | MoE | Dense |
 | **# Total Params** | - | - | 28B | 13.6B |
 | **# Activated Params** | - | - | 14B | 13.6B |
-| Image-Alignment | 4.12 | 4.18 | 4.18 | 4.04 |
-| Text-Alignment | 3.70 | 3.85 | 3.33 | 3.49 |
-| Visual Quality | 3.22 | 3.18 | 3.23 | 3.27 |
-| Motion Quality | 3.77 | 3.80 | 3.79 | 3.59 |
-| Overall Quality | 3.35 | 3.27 | 3.26 | 3.17 |
+| Image-Alignment↑ | 4.12 | 4.18 | 4.18 | 4.04 |
+| Text-Alignment↑ | 3.70 | 3.85 | 3.33 | 3.49 |
+| Visual Quality↑ | 3.22 | 3.18 | 3.23 | 3.27 |
+| Motion Quality↑ | 3.77 | 3.80 | 3.79 | 3.59 |
+| Overall Quality↑ | 3.35 | 3.27 | 3.26 | 3.17 |
 
 ## License Agreement
 
