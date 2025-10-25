@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   fill="none"
+   version="1.1"
+   width="594.24902"
+   height="100"
+   viewBox="0 0 594.24902 100"
+   id="svg7"
+   sodipodi:docname="longcat-video_logo.svg"
+   inkscape:version="1.4.2 (ebf0e940, 2025-05-08)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs7" />
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.858108"
+     inkscape:cx="276.08729"
+     inkscape:cy="6.996364"
+     inkscape:window-width="2304"
+     inkscape:window-height="1243"
+     inkscape:window-x="0"
+     inkscape:window-y="25"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g7"
+     inkscape:export-bgcolor="#ffffffff" />
+  <g
+     id="g7">
+    <g
+       id="g6">
+      <g
+         id="g3" />
+      <g
+         id="g4">
+        <path
+           d="m 4.62614,81.999556 c -1.321058,0 -2.279197,-1.2581 -1.9280502,-2.5317 L 19.566,18.291386 c 0.721,-2.615181 3.781,-3.769321 6.0495,-2.281758 l 22.1949,14.554028 c 1.33,0.8721 3.0502,0.8735 4.3816,0.0034 L 74.481,16.001644 c 2.2706,-1.483766 5.3282,-0.32536 6.0457,2.290412 l 16.7797,61.1784 c 0.3491,1.273 -0.6088,2.5291 -1.9288,2.5291 H 73.9544 c 3.8999,-4.5155 6.0457,-10.2829 6.0457,-16.2494 v -0.6963 c 0,-5.8361 -2.123,-11.473 -5.9728,-15.8593 l -2.7494,-13.8003 c -0.1615,-0.8108 -0.8732,-1.3947 -1.7,-1.3947 -0.3751,0 -0.74,0.1216 -1.0401,0.3466 l -10.3659,7.7745 c -0.7382,0.5536 -1.693,0.73 -2.5803,0.4764 -3.6546,-1.0441 -7.5285,-1.0441 -11.1831,0 -0.8873,0.2536 -1.8421,0.0772 -2.5803,-0.4764 l -10.3705,-7.7779 c -0.297,-0.2228 -0.6584,-0.3432 -1.0297,-0.3432 -0.8275,0 -1.5372,0.5904 -1.6877,1.404 l -2.6674,14.4205 c -3.8919,3.9576 -6.0728,9.286 -6.0728,14.8366 v 1.3191 c 0,5.8204 2.0821,11.4489 5.8699,15.8681 l 0.1301,0.1517 z"
+           fill-rule="evenodd"
+           fill="#29e154"
+           fill-opacity="1"
+           id="path3" />
+      </g>
+      <g
+         id="g5">
+        <path
+           d="m 39,70 h 6 V 56 h -5.090909 z m 22,0 H 55 V 56 h 5.0909 z"
+           fill="#000000"
+           fill-opacity="1"
+           id="path4" />
+        <path
+           d="M 37.93296,71 H 46 V 55 H 38.97192 Z M 54,71 h 8.067 L 61.0281,55 H 54 Z M 44,70 H 39 L 39.909091,56 H 45 V 70 Z M 60.9351,69 61,70 H 59.9979 56 55 V 56 h 5.0909 z"
+           fill-rule="evenodd"
+           fill="#ffffff"
+           fill-opacity="1"
+           id="path5" />
+      </g>
+    </g>
+    <text
+       xml:space="preserve"
+       style="font-size:58.6667px;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000"
+       x="112.31583"
+       y="72.60601"
+       id="text7"><tspan
+         sodipodi:role="line"
+         id="tspan7"
+         x="112.31583"
+         y="72.60601"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:58.6667px;font-family:meituan;-inkscape-font-specification:'meituan Bold';stroke:#ffffff;stroke-opacity:1">LongCat-Video</tspan></text>
+  </g>
+</svg>
