@@ -70,7 +70,7 @@ const HeroSection = () => {
           objectFit: 'cover',
         }}
       >
-        <source src="assets/videos/teaser.mp4" type="video/mp4" />
+        <source src="assets/videos/teaser-30.mp4" type="video/mp4" />
         Your browser does not support the video tag.
       </video>
       
