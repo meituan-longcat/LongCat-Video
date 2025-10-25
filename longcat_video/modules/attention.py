@@ -2,7 +2,6 @@ from typing import List, Optional
 
 import torch
 import torch.nn as nn
-import xformers.ops
 
 from einops import rearrange
 
@@ -92,6 +91,7 @@ class Attention(nn.Module):
             )
             x = rearrange(x, "B S H D -> B H S D")
         elif self.enable_xformers:
+            import xformers.ops
             # Input tensors must be in format ``[B, M, H, K]``, where B is the batch size, M \
             # the sequence length, H the number of heads, and K the embeding size per head
             q = rearrange(q, "B H M K -> B M H K")
@@ -241,6 +241,7 @@ class MultiHeadCrossAttention(nn.Module):
                 max_seqlen_k=max(kv_seqlen),
             )
         elif self.enable_xformers:
+            import xformers.ops
             attn_bias = xformers.ops.fmha.attn_bias.BlockDiagonalMask.from_seqlens([N] * B, kv_seqlen)
             x = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=attn_bias)
         else:
