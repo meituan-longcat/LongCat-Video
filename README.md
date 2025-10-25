@@ -7,7 +7,7 @@
 
 <div align="center" style="line-height: 1;">
   <a href='https://meituan-longcat.github.io/longcatvideo/'><img src='https://img.shields.io/badge/Project-Page-green'></a>
-  <a href='https://arxiv.org/abs/2508.14033'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
+  <a href='https://github.com/meituan-longcat/LongCat-Video/blob/main/longcatvideo_tech_report.pdf'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
   <a href='https://huggingface.co/meituan-longcat/LongCat-Video'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a>
 </div>
 
