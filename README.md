@@ -86,10 +86,10 @@ huggingface-cli download meituan-longcat/LongCat-Video --local-dir ./weights/Lon
 
 ```shell
 # Single-GPU inference
-torchrun run_demo_image_to_video.py --checkpoint_dir=./weights/LongCat-Video --enable_compile
+torchrun run_demo_text_to_video.py --checkpoint_dir=./weights/LongCat-Video --enable_compile
 
 # Multi-GPU inference
-torchrun --nproc_per_node=2 run_demo_image_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video --enable_compile
+torchrun --nproc_per_node=2 run_demo_text_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video --enable_compile
 ```
 
 ### Run Image-to-Video
