@@ -159,7 +159,9 @@ streamlit run ./run_streamlit.py --server.fileWatcherType none --server.headless
 # Single-GPU inference using Gradio App
 python run_gradio.py 
 ```
+![gradio_i2v](https://github.com/user-attachments/assets/32773a17-2310-45c7-8f72-95486487c7da)
 
+![gradio_t2v](https://github.com/user-attachments/assets/27bd5094-10db-4ee0-9364-5d6bcb1a3369)
 
 ## Evaluation Results
 
