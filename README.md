@@ -153,6 +153,12 @@ torchrun --nproc_per_node=2 run_demo_long_video.py --context_parallel_size=2 --c
 streamlit run ./run_streamlit.py --server.fileWatcherType none --server.headless=false
 ```
 
+### Run Gradio App
+
+```shell
+# Single-GPU inference using Gradio App
+python run_gradio.py 
+```
 
 
 ## Evaluation Results
