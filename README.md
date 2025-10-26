@@ -68,6 +68,30 @@ pip install flash_attn==2.7.4.post1
 pip install -r requirements.txt
 ```
 
+Install dependencies for cu128 Blackwell+ GPUs:
+
+```shell
+# create conda environment
+conda create -n longcat-video python=3.10
+conda activate longcat-video
+
+# install torch for cu128
+pip install torch==2.8.0 torchaudio==2.8.0 torchvision==0.23.0 
+
+# install flash-attn-2
+pip install ninja 
+pip install psutil 
+pip install packaging 
+pip install flash_attn==2.7.4.post1
+
+# install other requirements
+pip install -r requirements_cu128.txt
+
+# install xformers only if plan to use 
+pip install xformers==0.0.33.dev1085
+```
+
+
 FlashAttention-2 is enabled in the model config by default; you can also change the model config to use FlashAttention-3 or xformers.
 
 ### Model Download
