@@ -44,7 +44,7 @@ For more detail, please refer to the comprehensive [***LongCat-Video Technical R
 Clone the repo:
 
 ```shell
-git clone https://github.com/meituan-longcat/LongCat-Video
+git clone --single-branch --branch main https://github.com/meituan-longcat/LongCat-Video
 cd LongCat-Video
 ```
 
