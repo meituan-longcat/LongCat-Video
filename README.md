@@ -68,7 +68,7 @@ pip install flash_attn==2.7.4.post1
 pip install -r requirements.txt
 ```
 
-FlashAttention-2 is enabled in the model config by default; you can also change the model config to use FlashAttention-3 or xformers.
+FlashAttention-2 is enabled in the model config by default; you can also change the model config ("./weights/LongCat-Video/dit/config.json") to use FlashAttention-3 or xformers once installed.
 
 ### Model Download
 
