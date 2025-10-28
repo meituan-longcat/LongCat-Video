@@ -178,6 +178,11 @@ It is the responsibility of developers and downstream users to understand and co
 
 Nothing in this Model Card should be interpreted as altering or restricting the terms of the MIT License under which the model is released. 
 
+## Community Works
+
+[CacheDiT](https://github.com/vipshop/cache-dit) offers Fully Cache Acceleration support for LongCat-Video with DBCache and TaylorSeer, achieved nearly 1.7x speedup without obvious loss of precision. Visit their [example](https://github.com/vipshop/cache-dit/blob/main/examples/pipeline/run_longcat_video.py) for more details.
+
+
 ## Citation
 We kindly encourage citation of our work if you find it useful.
 
