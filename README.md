@@ -122,6 +122,16 @@ torchrun run_demo_long_video.py --checkpoint_dir=./weights/LongCat-Video --enabl
 torchrun --nproc_per_node=2 run_demo_long_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video --enable_compile
 ```
 
+### Run Interactive Video Generation
+
+```shell
+# Single-GPU inference
+torchrun run_demo_interactive_video.py --checkpoint_dir=./weights/LongCat-Video --enable_compile
+
+# Multi-GPU inference
+torchrun --nproc_per_node=2 run_demo_interactive_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video --enable_compile
+```
+
 ### Run Streamlit
 
 ```shell
