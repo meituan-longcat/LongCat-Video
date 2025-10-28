@@ -192,14 +192,14 @@ Nothing in this Model Card should be interpreted as altering or restricting the 
 We kindly encourage citation of our work if you find it useful.
 
 ```
-@misc{meituan2025longcatvideotechnicalreport, 
-    title={LongCat-Video Technical Report}, 
-    author={Meituan LongCat Team}, 
-    year={2025}, 
-    eprint={xxx}, 
-    archivePrefix={arXiv}, 
-    primaryClass={cs.CL}, 
-    url={https://arxiv.org/abs/xxx}, 
+@misc{meituanlongcatteam2025longcatvideotechnicalreport,
+      title={LongCat-Video Technical Report}, 
+      author={Meituan LongCat Team and Xunliang Cai and Qilong Huang and Zhuoliang Kang and Hongyu Li and Shijun Liang and Liya Ma and Siyu Ren and Xiaoming Wei and Rixu Xie and Tong Zhang},
+      year={2025},
+      eprint={2510.22200},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2510.22200}, 
 }
 ```
 
