@@ -7,7 +7,7 @@
 
 <div align="center" style="line-height: 1;">
   <a href='https://meituan-longcat.github.io/LongCat-Video/'><img src='https://img.shields.io/badge/Project-Page-green'></a>
-  <a href='https://github.com/meituan-longcat/LongCat-Video/blob/main/longcatvideo_tech_report.pdf'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
+  <a href='https://arxiv.org/abs/2510.22200'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
   <a href='https://huggingface.co/meituan-longcat/LongCat-Video'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a>
 </div>
 
@@ -29,7 +29,7 @@ We introduce LongCat-Video, a foundational video generation model with 13.6B par
 - 🌟 **Efficient inference**: LongCat-Video generates $720p$, $30fps$ videos within minutes by employing a coarse-to-fine generation strategy along both the temporal and spatial axes. Block Sparse Attention further enhances efficiency, particularly at high resolutions
 - 🌟 **Strong performance with multi-reward RLHF**: Powered by multi-reward Group Relative Policy Optimization (GRPO), comprehensive evaluations on both internal and public benchmarks demonstrate that LongCat-Video achieves performance comparable to leading open-source video generation models as well as the latest commercial solutions.
 
-For more detail, please refer to the comprehensive [***LongCat-Video Technical Report***](https://github.com/meituan-longcat/LongCat-Video/blob/main/longcatvideo_tech_report.pdf).
+For more detail, please refer to the comprehensive [***LongCat-Video Technical Report***](https://arxiv.org/abs/2510.22200).
 
 ## 🎥 Teaser Video
 
