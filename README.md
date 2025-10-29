@@ -172,6 +172,13 @@ The *Image-to-Video* MOS evaluation results on our internal benchmark.
 | Motion Quality↑ | 3.77 | 3.80 | 3.79 | 3.59 |
 | Overall Quality↑ | 3.35 | 3.27 | 3.26 | 3.17 |
 
+## Community Works
+
+Community works are welcome! Please PR or inform us in Issue to add your work.
+
+- [CacheDiT](https://github.com/vipshop/cache-dit) offers Fully Cache Acceleration support for LongCat-Video with DBCache and TaylorSeer, achieved nearly 1.7x speedup without obvious loss of precision. Visit their [example](https://github.com/vipshop/cache-dit/blob/main/examples/pipeline/run_longcat_video.py) for more details.
+
+
 ## License Agreement
 
 The **model weights** are released under the **MIT License**. 
@@ -179,6 +186,7 @@ The **model weights** are released under the **MIT License**.
 Any contributions to this repository are licensed under the MIT License, unless otherwise stated. This license does not grant any rights to use Meituan trademarks or patents. 
 
 See the [LICENSE](LICENSE) file for the full license text.
+
 
 ## Usage Considerations 
 This model has not been specifically designed or comprehensively evaluated for every possible downstream application. 
