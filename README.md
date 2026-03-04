@@ -278,4 +278,5 @@ We would like to thank the contributors to the [Wan](https://huggingface.co/Wan-
 
 
 ## Contact
-Please contact us at <a href="mailto:longcat-team@meituan.com">longcat-team@meituan.com</a> or join our <a href="assets/wechat_group.png">WeChat Group</a> if you have any questions.
+Please contact us at <a href="mailto:longcat-team@meituan.com">longcat-team@meituan.com</a> or scan the QR code to join our WeChat Group if you have any questions.
+<img src="assets/Wechat.png" width="200px">
