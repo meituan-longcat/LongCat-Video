@@ -16,6 +16,7 @@
   <img src='assets/longcat_video_avatar_title.svg' alt="LongCat-Video-Avatar">
   <a href='https://meigen-ai.github.io/LongCat-Video-Avatar/'><img src='https://img.shields.io/badge/Project-Page-green'></a>
   <a href='https://github.com/meituan-longcat/LongCat-Video/blob/main/assets/LongCat-Video-Avatar-Tech-Report.pdf'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
+  <a href="https://discord.gg/EXsG52D8SW"><img src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white&style=for-the-badge" alt="Discord Badge" />
   <a href='https://huggingface.co/meituan-longcat/LongCat-Video-Avatar'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a>
 </div>
 <div align="center" style="line-height: 1;">
