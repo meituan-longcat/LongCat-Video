@@ -25,8 +25,8 @@ def torch_gc():
 
 def generate(args):
     # case setup
-    prompt = "In a realistic photography style, a white boy around seven or eight years old sits on a park bench, wearing a light blue T-shirt, denim shorts, and white sneakers. He holds an ice cream cone with vanilla and chocolate flavors, and beside him is a medium-sized golden Labrador. Smiling, the boy offers the ice cream to the dog, who eagerly licks it with its tongue. The sun is shining brightly, and the background features a green lawn and several tall trees, creating a warm and loving scene."
-    negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+    prompt = "cinematic realistic car commercial, silver BMW M5 E60 driving on a highway, extreme close-up of the M5 badge with light reflecting on chrome, camera slowly pulls back revealing the full front view, smooth side tracking shot highlighting the body lines, close-up shots of spinning performance wheels and aerodynamic side mirrors, dramatic low-angle shot as the car speeds past the camera, ultra realistic lighting, professional automotive commercial style"."
+    negative_prompt ="cartoon, animation, low quality, blurry, distorted car, unrealistic reflections, bad lighting, CGI look""
     spatial_refine_only = False 
 
     # load parsed args
@@ -76,10 +76,10 @@ def generate(args):
     output = pipe.generate_t2v(
         prompt=prompt,
         negative_prompt=negative_prompt,
-        height=480,
-        width=832,
-        num_frames=93,
-        num_inference_steps=50,
+        height=720,
+        width=1280,
+        num_frames=90,
+        num_inference_steps=60,
         guidance_scale=4.0,
         generator=generator,
     )[0]
@@ -145,7 +145,7 @@ def generate(args):
         output_tensor = torch.from_numpy(output_refine)
         output_tensor = (output_tensor * 255).clamp(0, 255).to(torch.uint8)
         fps = 15 if spatial_refine_only else 30
-        write_video("output_t2v_refine.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{10}"})
+        write_video("bmw_m5_cinematic.mp4", output_tensor, fps=fps, video_codec="libx264", options={"crf": f"{10}"})
 
 
 def _parse_args():
