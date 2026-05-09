@@ -25,8 +25,8 @@ def torch_gc():
 
 def generate(args):
     # case setup
-    prompt = "In a realistic photography style, a white boy around seven or eight years old sits on a park bench, wearing a light blue T-shirt, denim shorts, and white sneakers. He holds an ice cream cone with vanilla and chocolate flavors, and beside him is a medium-sized golden Labrador. Smiling, the boy offers the ice cream to the dog, who eagerly licks it with its tongue. The sun is shining brightly, and the background features a green lawn and several tall trees, creating a warm and loving scene."
-    negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
+    prompt =  "cinematic realistic car commercial, silver BMW M5 driving on a highway, extreme close-up of the M5 badge with light reflecting on chrome, camera slowly pulls back revealing the full front view, smooth side tracking shot highlighting the body lines, close-up shots of spinning performance wheels and aerodynamic side mirrors, dramatic low-angle shot as the car speeds past the camera, ultra realistic lighting, professional automotive commercial style"."
+    negative_prompt = "Bright tones, overexposed, static, blurred details, subtitles, style, wo9rks, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
     spatial_refine_only = False 
 
     # load parsed args
