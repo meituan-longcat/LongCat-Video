@@ -9,13 +9,13 @@
 <div align="center" style="line-height: 1;">
   <img src='assets/longcat_video_title.svg' alt="LongCat-Video">
   <a href='https://meituan-longcat.github.io/LongCat-Video/'><img src='https://img.shields.io/badge/Project-Page-green'></a>
-  <a href='https://arxiv.org/abs/2510.22200'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
+  <a href='https://arxiv.org/abs/2510.22200'><img src='https://img.shields.io/badge/Technical-Report-red'></a>
   <a href='https://huggingface.co/meituan-longcat/LongCat-Video'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a>
 </div>
 <div align="center" style="line-height: 1;">
   <img src='assets/longcat_video_avatar_1.5_title.svg' alt="LongCat-Video-Avatar 1.5">
   <a href='https://meigen-ai.github.io/LongCat-Video-Avatar-1.5-Page/'><img src='https://img.shields.io/badge/Project-Page-green'></a>
-  <a href='https://github.com/meituan-longcat/LongCat-Video/blob/main/assets/LongCat-Video-Avatar-1.5-Tech-Report.pdf'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
+  <a href='https://github.com/meituan-longcat/LongCat-Video/blob/main/assets/LongCat-Video-Avatar-1.5-Tech-Report.pdf'><img src='https://img.shields.io/badge/Technical-Report-red'></a>
   <a href='https://huggingface.co/meituan-longcat/LongCat-Video-Avatar-1.5'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a>
   <a href='https://www.modelscope.cn/models/meituan-longcat/LongCat-Video-Avatar-1.5'><img src='https://img.shields.io/badge/ModelScope-Model-purple'></a>
 </div>
