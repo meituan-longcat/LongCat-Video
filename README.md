@@ -77,10 +77,13 @@ pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0 --ind
 pip install ninja 
 pip install psutil 
 pip install packaging 
-pip install flash_attn==2.7.4.post1
+pip install flash_attn==2.7.4.post1 --no-build-isolation
 
 # install other requirements
 pip install -r requirements.txt
+
+pip install soundfile==0.13.1
+pip install 'tritonclient[all]==2.64.0'
 
 # install longcat-video-avatar requirements
 conda install -c conda-forge librosa
