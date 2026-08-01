@@ -171,8 +171,14 @@ class LongCatVideoAvatarPipeline:
         )
         text_input_ids, mask = text_inputs.input_ids, text_inputs.attention_mask
 
-        prompt_embeds = self.text_encoder(text_input_ids.to(device), mask.to(device)).last_hidden_state
-        prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
+        # Keep only the final encoder state.  In particular, never let the
+        # returned conditioning retain a transformers ModelOutput or an
+        # autograd graph (which in turn retains every encoder parameter).
+        with torch.inference_mode():
+            encoder_output = self.text_encoder(text_input_ids.to(device), mask.to(device))
+            prompt_embeds = encoder_output.last_hidden_state.detach()
+            prompt_embeds = prompt_embeds.to(dtype=dtype, device=device).contiguous()
+        del encoder_output, text_inputs, text_input_ids
         mask = mask.to(device=device)
         mask = torch.cat([mask]*num_videos_per_prompt, dim=0)
 
@@ -181,7 +187,7 @@ class LongCatVideoAvatarPipeline:
         prompt_embeds = prompt_embeds.repeat(1, num_videos_per_prompt, 1)
         prompt_embeds = prompt_embeds.view(batch_size * num_videos_per_prompt, 1, seq_len, -1)
 
-        return prompt_embeds, mask
+        return prompt_embeds.detach(), mask.detach()
 
     def encode_prompt(
         self,
@@ -247,6 +253,78 @@ class LongCatVideoAvatarPipeline:
             negative_prompt_attention_mask = None
             
         return prompt_embeds, prompt_attention_mask, negative_prompt_embeds, negative_prompt_attention_mask
+
+    def prepare_prompt_conditioning(
+        self,
+        prompt,
+        negative_prompt,
+        do_classifier_free_guidance,
+        num_videos_per_prompt,
+        max_sequence_length,
+        dtype,
+        device,
+        prompt_conditioning=None,
+    ):
+        """Return precomputed conditioning or preserve the legacy CP encoding path."""
+        if prompt_conditioning is not None:
+            required = ("prompt_embeds", "prompt_attention_mask")
+            missing = [key for key in required if prompt_conditioning.get(key) is None]
+            if missing:
+                raise ValueError(f"Missing precomputed prompt conditioning: {missing}")
+            values = []
+            for key in (
+                "prompt_embeds",
+                "prompt_attention_mask",
+                "negative_prompt_embeds",
+                "negative_prompt_attention_mask",
+            ):
+                value = prompt_conditioning.get(key)
+                if value is not None:
+                    target_dtype = dtype if "embeds" in key else value.dtype
+                    value = value.to(device=device, dtype=target_dtype)
+                values.append(value)
+            if do_classifier_free_guidance and (values[2] is None or values[3] is None):
+                raise ValueError("Classifier-free guidance requires negative prompt conditioning")
+            return tuple(values)
+
+        if self.text_encoder is None or self.tokenizer is None:
+            raise RuntimeError(
+                "text_encoder and tokenizer are required unless prompt_conditioning is provided"
+            )
+
+        if context_parallel_util.get_cp_rank() == 0:
+            conditioning = self.encode_prompt(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                do_classifier_free_guidance=do_classifier_free_guidance,
+                num_videos_per_prompt=num_videos_per_prompt,
+                max_sequence_length=max_sequence_length,
+                dtype=dtype,
+                device=device,
+            )
+            if context_parallel_util.get_cp_size() > 1:
+                for value in conditioning:
+                    if value is not None:
+                        context_parallel_util.cp_broadcast(value)
+            return conditioning
+
+        caption_channels = self.text_encoder.config.d_model
+        prompt_embeds = torch.zeros(
+            [len(prompt) if isinstance(prompt, list) else 1, 1, max_sequence_length, caption_channels],
+            dtype=dtype,
+            device=device,
+        )
+        prompt_attention_mask = torch.zeros(
+            [prompt_embeds.shape[0], max_sequence_length], dtype=torch.int64, device=device
+        )
+        conditioning = [prompt_embeds, prompt_attention_mask, None, None]
+        if do_classifier_free_guidance:
+            conditioning[2] = torch.zeros_like(prompt_embeds)
+            conditioning[3] = torch.zeros_like(prompt_attention_mask)
+        for value in conditioning:
+            if value is not None:
+                context_parallel_util.cp_broadcast(value)
+        return tuple(conditioning)
 
     def check_inputs(
         self,
@@ -348,7 +426,7 @@ class LongCatVideoAvatarPipeline:
     @property
     def text_guidance_scale(self):
         return self._text_guidance_scale
-    
+
     @property
     def audio_guidance_scale(self):
         return self._audio_guidance_scale
@@ -403,7 +481,8 @@ class LongCatVideoAvatarPipeline:
     def _cache_clean_latents(self, cond_latents, model_max_length, offload_kv_cache, device, dtype, audio_embs, num_cond_latents, num_ref_latents, ref_img_index):
         timestep = torch.zeros(cond_latents.shape[0], cond_latents.shape[2]).to(device=device, dtype=dtype)
         # make null prompt tensor(skip_crs_attn=True, so tensors below will not be actually used)
-        empty_embeds = torch.zeros([cond_latents.shape[0], 1, model_max_length, self.text_encoder.config.d_model], device=device, dtype=dtype)
+        caption_channels = self.dit.config.caption_channels
+        empty_embeds = torch.zeros([cond_latents.shape[0], 1, model_max_length, caption_channels], device=device, dtype=dtype)
         _, kv_cache_dict = self.dit(
             hidden_states=cond_latents, 
             timestep=timestep, 
@@ -655,7 +734,8 @@ class LongCatVideoAvatarPipeline:
         attention_kwargs: Optional[Dict[str, Any]] = None,
         max_sequence_length: int = 512,
         # avatar related params
-        audio_emb: torch.Tensor = None
+        audio_emb: torch.Tensor = None,
+        prompt_conditioning: Optional[Dict[str, torch.Tensor]] = None,
     ):
         r"""
         Generates video frames from text prompt using diffusion process.
@@ -737,38 +817,16 @@ class LongCatVideoAvatarPipeline:
         # 3. Encode inputs
         dit_dtype = self.dit.dtype
 
-        if context_parallel_util.get_cp_rank() == 0:
-            (
-                prompt_embeds, 
-                prompt_attention_mask, 
-                negative_prompt_embeds, 
-                negative_prompt_attention_mask,
-            ) = self.encode_prompt(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                do_classifier_free_guidance=self.do_classifier_free_guidance,
-                num_videos_per_prompt=num_videos_per_prompt,
-                max_sequence_length=max_sequence_length,
-                dtype=dit_dtype,
-                device=device,
-            )
-            if context_parallel_util.get_cp_size() > 1:
-                context_parallel_util.cp_broadcast(prompt_embeds)
-                context_parallel_util.cp_broadcast(prompt_attention_mask)
-                if self.do_classifier_free_guidance:
-                    context_parallel_util.cp_broadcast(negative_prompt_embeds)
-                    context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
-        elif context_parallel_util.get_cp_size() > 1:
-            caption_channels = self.text_encoder.config.d_model
-            prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-            prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
-            context_parallel_util.cp_broadcast(prompt_embeds)
-            context_parallel_util.cp_broadcast(prompt_attention_mask)
-            if self.do_classifier_free_guidance:
-                negative_prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-                negative_prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
-                context_parallel_util.cp_broadcast(negative_prompt_embeds)
-                context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
+        (
+            prompt_embeds,
+            prompt_attention_mask,
+            negative_prompt_embeds,
+            negative_prompt_attention_mask,
+        ) = self.prepare_prompt_conditioning(
+            prompt, negative_prompt, self.do_classifier_free_guidance,
+            num_videos_per_prompt, max_sequence_length, dit_dtype, device,
+            prompt_conditioning,
+        )
 
         audio_cond_embs = torch.cat([audio_emb] * num_videos_per_prompt, dim=0)
         if self.do_classifier_free_guidance:
@@ -888,6 +946,7 @@ class LongCatVideoAvatarPipeline:
         audio_emb: torch.Tensor = None,
         ref_target_masks: torch.Tensor = None,
         resize_mode: Optional[str] = "crop", # "default" / "crop"
+        prompt_conditioning: Optional[Dict[str, torch.Tensor]] = None,
     ):
         r"""
         Generates video frames from an input image and text prompt using diffusion process.
@@ -976,38 +1035,16 @@ class LongCatVideoAvatarPipeline:
         # 3. Encode inputs
         dit_dtype = self.dit.dtype
 
-        if context_parallel_util.get_cp_rank() == 0:
-            (
-                prompt_embeds, 
-                prompt_attention_mask, 
-                negative_prompt_embeds, 
-                negative_prompt_attention_mask,
-            ) = self.encode_prompt(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                do_classifier_free_guidance=self.do_classifier_free_guidance,
-                num_videos_per_prompt=num_videos_per_prompt,
-                max_sequence_length=max_sequence_length,
-                dtype=dit_dtype,
-                device=device,
-            )
-            if context_parallel_util.get_cp_size() > 1:
-                context_parallel_util.cp_broadcast(prompt_embeds)
-                context_parallel_util.cp_broadcast(prompt_attention_mask)
-                if self.do_classifier_free_guidance:
-                    context_parallel_util.cp_broadcast(negative_prompt_embeds)
-                    context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
-        elif context_parallel_util.get_cp_size() > 1:
-            caption_channels = self.text_encoder.config.d_model
-            prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-            prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
-            context_parallel_util.cp_broadcast(prompt_embeds)
-            context_parallel_util.cp_broadcast(prompt_attention_mask)
-            if self.do_classifier_free_guidance:
-                negative_prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-                negative_prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
-                context_parallel_util.cp_broadcast(negative_prompt_embeds)
-                context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
+        (
+            prompt_embeds,
+            prompt_attention_mask,
+            negative_prompt_embeds,
+            negative_prompt_attention_mask,
+        ) = self.prepare_prompt_conditioning(
+            prompt, negative_prompt, self.do_classifier_free_guidance,
+            num_videos_per_prompt, max_sequence_length, dit_dtype, device,
+            prompt_conditioning,
+        )
 
         audio_cond_embs = torch.cat([audio_emb] * num_videos_per_prompt, dim=0)
         audio_num = audio_cond_embs.shape[0]
@@ -1179,6 +1216,7 @@ class LongCatVideoAvatarPipeline:
         mask_frame_range: int = None,
         ref_target_masks: torch.Tensor = None,
         resize_mode: Optional[str] = "crop", # "default" / "crop"
+        prompt_conditioning: Optional[Dict[str, torch.Tensor]] = None,
     ):
         r"""
         Generates video frames from a source video and text prompt using diffusion process with spatio-temporal conditioning.
@@ -1278,38 +1316,16 @@ class LongCatVideoAvatarPipeline:
         # 3. Encode inputs
         dit_dtype = self.dit.dtype
 
-        if context_parallel_util.get_cp_rank() == 0:
-            (
-                prompt_embeds, 
-                prompt_attention_mask, 
-                negative_prompt_embeds, 
-                negative_prompt_attention_mask,
-            ) = self.encode_prompt(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                do_classifier_free_guidance=self.do_classifier_free_guidance,
-                num_videos_per_prompt=num_videos_per_prompt,
-                max_sequence_length=max_sequence_length,
-                dtype=dit_dtype,
-                device=device,
-            )
-            if context_parallel_util.get_cp_size() > 1:
-                context_parallel_util.cp_broadcast(prompt_embeds)
-                context_parallel_util.cp_broadcast(prompt_attention_mask)
-                if self.do_classifier_free_guidance:
-                    context_parallel_util.cp_broadcast(negative_prompt_embeds)
-                    context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
-        elif context_parallel_util.get_cp_size() > 1:
-            caption_channels = self.text_encoder.config.d_model
-            prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-            prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
-            context_parallel_util.cp_broadcast(prompt_embeds)
-            context_parallel_util.cp_broadcast(prompt_attention_mask)
-            if self.do_classifier_free_guidance:
-                negative_prompt_embeds = torch.zeros([batch_size, 1, max_sequence_length, caption_channels], dtype=dit_dtype, device=device)
-                negative_prompt_attention_mask = torch.zeros([batch_size, max_sequence_length], dtype=torch.int64, device=device)
-                context_parallel_util.cp_broadcast(negative_prompt_embeds)
-                context_parallel_util.cp_broadcast(negative_prompt_attention_mask)
+        (
+            prompt_embeds,
+            prompt_attention_mask,
+            negative_prompt_embeds,
+            negative_prompt_attention_mask,
+        ) = self.prepare_prompt_conditioning(
+            prompt, negative_prompt, self.do_classifier_free_guidance,
+            num_videos_per_prompt, max_sequence_length, dit_dtype, device,
+            prompt_conditioning,
+        )
 
         audio_cond_embs = torch.cat([audio_emb] * num_videos_per_prompt, dim=0)
         audio_num = audio_cond_embs.shape[0]
@@ -1539,4 +1555,3 @@ class LongCatVideoAvatarPipeline:
         if self.vae is not None:
             self.vae = self.vae.to(device, non_blocking=True)
         return self
-    
