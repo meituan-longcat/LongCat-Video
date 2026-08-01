@@ -1,10 +1,10 @@
 import io
+import os
 import re
 import time
 import base64
 
 from PIL import Image
-from openai import OpenAI
 
 
 def compress_image(image_path, max_size_kb=500, quality=85):
@@ -29,7 +29,16 @@ def encode_image(image_bytes):
 
 ### Settings
 
-APPKEY = 'YOUR_APPKEY'
+MINIMAX_API_KEY = "YOUR_MINIMAX_API_KEY"
+MINIMAX_REGION = "global_en"
+MINIMAX_ENDPOINTS = {
+    "global_en": "https://api.minimax.io/v1",
+    "cn_zh": "https://api.minimaxi.com/v1",
+}
+MINIMAX_TEXT_MODEL_IDS = ("MiniMax-M3", "MiniMax-M2.7")
+MINIMAX_IMAGE_MODEL_IDS = ("MiniMax-M3",)
+MINIMAX_TEXT_MODEL = MINIMAX_TEXT_MODEL_IDS[0]
+MINIMAX_IMAGE_MODEL = MINIMAX_IMAGE_MODEL_IDS[0]
 
 LM_ZH_SYS_PROMPT = \
     '''用户会输入视频内容描述或者视频任务的描述，你需要基于用户的输入生成优质的视频内容描述，使其更完整、更具表现力，同时不改变原意。\n''' \
@@ -92,6 +101,39 @@ VL_SYS_PROMPT_SHORT_EN = \
 
 ### Util funcitons
 
+def get_minimax_base_url():
+    base_url = os.getenv("MINIMAX_BASE_URL")
+    if base_url:
+        return base_url
+    region = os.getenv("MINIMAX_REGION", MINIMAX_REGION)
+    if region not in MINIMAX_ENDPOINTS:
+        raise ValueError(f"Unsupported MINIMAX_REGION: {region}")
+    return MINIMAX_ENDPOINTS[region]
+
+
+def get_minimax_client():
+    from openai import OpenAI
+
+    return OpenAI(
+        api_key=os.getenv("MINIMAX_API_KEY", MINIMAX_API_KEY),
+        base_url=get_minimax_base_url(),
+    )
+
+
+def get_minimax_text_model():
+    model = os.getenv("MINIMAX_TEXT_MODEL", MINIMAX_TEXT_MODEL)
+    if model not in MINIMAX_TEXT_MODEL_IDS:
+        raise ValueError(f"Unsupported MINIMAX_TEXT_MODEL: {model}")
+    return model
+
+
+def get_minimax_image_model():
+    model = os.getenv("MINIMAX_IMAGE_MODEL", MINIMAX_IMAGE_MODEL)
+    if model not in MINIMAX_IMAGE_MODEL_IDS:
+        raise ValueError(f"Unsupported MINIMAX_IMAGE_MODEL: {model}")
+    return model
+
+
 def is_chinese_prompt(string):
     valid_chars = re.findall(r'[\u4e00-\u9fffA-Za-z0-9]', string)
     if not valid_chars:
@@ -107,9 +149,7 @@ def enhance_prompt_i2v(image_path: str, prompt: str, retry_times: int = 3):
     """
     Enhance a prompt used for text-2-video
     """
-    client = OpenAI(
-        api_key=f"{APPKEY}",
-    )
+    client = get_minimax_client()
 
     compressed_image = compress_image(image_path)
     base64_image = encode_image(compressed_image)
@@ -133,7 +173,7 @@ def enhance_prompt_i2v(image_path: str, prompt: str, retry_times: int = 3):
         try:
             response = client.chat.completions.create(
                 messages=message,
-                model="gpt-4.1",
+                model=get_minimax_image_model(),
                 temperature=0.01,
                 top_p=0.7,
                 stream=False,
@@ -155,9 +195,7 @@ def enhance_prompt_t2v(prompt: str, retry_times: int = 3):
     """
     Enhance a prompt used for text-2-video
     """
-    client = OpenAI(
-        api_key=f"{APPKEY}",
-    )
+    client = get_minimax_client()
     text = prompt.strip()
     sys_prompt = LM_ZH_SYS_PROMPT if is_chinese_prompt(text) else LM_EN_SYS_PROMPT
     for i in range(retry_times):
@@ -170,7 +208,7 @@ def enhance_prompt_t2v(prompt: str, retry_times: int = 3):
                         "content": f'{text}"',
                     },
                 ],
-                model="gpt-4.1",
+                model=get_minimax_text_model(),
                 temperature=0.01,
                 top_p=0.7,
                 stream=False,
