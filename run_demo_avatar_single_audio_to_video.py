@@ -82,6 +82,70 @@ def surviving_reference_types(reference):
 def is_preprocessing_rank(cp_rank):
     return cp_rank == 0
 
+
+def normalize_output_name(output_name):
+    """Validate a filename-only output name and normalize its MP4 suffix."""
+    if output_name is None:
+        return None
+    if not output_name or output_name in {".", ".."}:
+        raise argparse.ArgumentTypeError(
+            "--output_name must be a non-empty filename other than '.' or '..'"
+        )
+    if "/" in output_name or "\\" in output_name:
+        raise argparse.ArgumentTypeError(
+            "--output_name must be a filename only and cannot contain path separators"
+        )
+
+    stem = output_name
+    while stem.lower().endswith(".mp4"):
+        stem = stem[:-4]
+    if not stem or stem in {".", ".."}:
+        raise argparse.ArgumentTypeError(
+            "--output_name must contain a filename before the .mp4 suffix"
+        )
+    return f"{stem}.mp4"
+
+
+def build_output_paths(output_dir, output_name, stage_1, num_segments):
+    """Return the primary and continuation output paths for this invocation."""
+    output_dir = Path(output_dir)
+    if output_name is None:
+        paths = [output_dir / f"{stage_1}_demo_1.mp4"]
+        paths.extend(
+            output_dir / f"video_continue_{segment_idx}.mp4"
+            for segment_idx in range(2, num_segments + 1)
+        )
+        return paths
+
+    normalized_name = normalize_output_name(output_name)
+    stem = normalized_name[:-4]
+    paths = [output_dir / normalized_name]
+    paths.extend(
+        output_dir / f"{stem}_continue_{segment_idx}.mp4"
+        for segment_idx in range(2, num_segments + 1)
+    )
+    return paths
+
+
+def prepare_output_paths(output_dir, output_name, stage_1, num_segments):
+    """Create the output directory and reject collisions for named outputs."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths = build_output_paths(output_dir, output_name, stage_1, num_segments)
+    if output_name is not None:
+        existing = [path for path in paths if path.exists()]
+        if existing:
+            raise FileExistsError(
+                "Refusing to overwrite existing output file(s): "
+                + ", ".join(str(path) for path in existing)
+            )
+    return paths
+
+
+def ffmpeg_output_base(output_path):
+    """Adapt a canonical .mp4 path to save_video_ffmpeg's suffixless API."""
+    return str(output_path.with_suffix(""))
+
 def generate_random_uid():
     timestamp_part = str(int(time.time()))[-6:]
     random_part = str(random.randint(100000, 999999))
@@ -116,6 +180,10 @@ def generate(args):
     model_type = args.model_type
     use_distill = args.use_distill
     use_int8 = args.use_int8
+
+    output_paths = prepare_output_paths(
+        output_dir, args.output_name, stage_1, num_segments
+    )
 
     if use_distill and model_type == "avatar-v1.5":
         num_inference_steps = 8
@@ -451,7 +519,7 @@ def generate(args):
 
         if cp_rank == 0:
             output_tensor = torch.from_numpy(np.array(video))
-            save_video_ffmpeg(output_tensor, os.path.join(output_dir, "at2v_demo_1"), raw_speech_path, fps=save_fps, quality=5)
+            save_video_ffmpeg(output_tensor, ffmpeg_output_base(output_paths[0]), raw_speech_path, fps=save_fps, quality=5)
         del output
         torch_gc()
     
@@ -483,7 +551,7 @@ def generate(args):
 
         if cp_rank == 0:
             output_tensor = torch.from_numpy(np.array(video))
-            save_video_ffmpeg(output_tensor, os.path.join(output_dir, "ai2v_demo_1"), raw_speech_path, fps=save_fps, quality=5)
+            save_video_ffmpeg(output_tensor, ffmpeg_output_base(output_paths[0]), raw_speech_path, fps=save_fps, quality=5)
         del output
         torch_gc()
     else:
@@ -552,7 +620,7 @@ def generate(args):
 
         if cp_rank == 0:
             output_tensor = torch.from_numpy(np.array(all_generated_frames))
-            save_video_ffmpeg(output_tensor, os.path.join(output_dir, f"video_continue_{segment_idx+1}"), raw_speech_path, fps=save_fps, quality=5)
+            save_video_ffmpeg(output_tensor, ffmpeg_output_base(output_paths[segment_idx]), raw_speech_path, fps=save_fps, quality=5)
             del output_tensor
 
 
@@ -567,6 +635,12 @@ def _parse_args():
         '--output_dir',
         type=str,
         default='./outputs_avatar_single'
+    )
+    parser.add_argument(
+        '--output_name',
+        type=normalize_output_name,
+        default=None,
+        help="Output filename (with or without .mp4); path separators are not allowed",
     )
     parser.add_argument(
         '--resolution',
