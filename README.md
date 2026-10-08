@@ -71,13 +71,13 @@ conda create -n longcat-video python=3.10
 conda activate longcat-video
 
 # install torch (configure according to your CUDA version)
-pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+pip install torch==2.7.1+cu128 torchvision==0.22.1+cu128 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 
 # install flash-attn-2
 pip install ninja 
 pip install psutil 
 pip install packaging 
-pip install flash_attn==2.7.4.post1
+pip install flash_attn==2.8.3 --no-build-isolation
 
 # install other requirements
 pip install -r requirements.txt
