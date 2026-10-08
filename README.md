@@ -71,13 +71,13 @@ conda create -n longcat-video python=3.10
 conda activate longcat-video
 
 # install torch (configure according to your CUDA version)
-pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+pip install torch==2.7.1+cu128 torchvision==0.22.1+cu128 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 
 # install flash-attn-2
 pip install ninja 
 pip install psutil 
 pip install packaging 
-pip install flash_attn==2.7.4.post1
+pip install flash_attn==2.8.3 --no-build-isolation
 
 # install other requirements
 pip install -r requirements.txt
@@ -90,6 +90,13 @@ pip install -r requirements_avatar.txt
 ```
 
 FlashAttention-2 is enabled in the model config by default; you can also change the model config ("./weights/LongCat-Video/dit/config.json") to use FlashAttention-3 or xformers once installed.
+
+#### NVIDIA Blackwell
+
+LongCat-Video supports NVIDIA Blackwell GPUs with CUDA 12.8 and PyTorch 2.7, as installed above; this requires an NVIDIA driver that supports CUDA 12.8 (R570 or newer). The previous CUDA 12.4 / PyTorch 2.6 environment ships no kernels for these GPUs and fails with `CUDA error: no kernel image is available for execution on the device`. `--no-build-isolation` lets the flash-attn installer see the installed PyTorch and download the matching prebuilt wheel, which includes Blackwell kernels, instead of building from source.
+
+Tested GPU:
+- NVIDIA RTX PRO 6000 Blackwell Server Edition
 
 ### Model Download
 
