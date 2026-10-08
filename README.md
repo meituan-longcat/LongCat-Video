@@ -91,6 +91,13 @@ pip install -r requirements_avatar.txt
 
 FlashAttention-2 is enabled in the model config by default; you can also change the model config ("./weights/LongCat-Video/dit/config.json") to use FlashAttention-3 or xformers once installed.
 
+#### NVIDIA Blackwell
+
+LongCat-Video supports NVIDIA Blackwell GPUs with CUDA 12.8 and PyTorch 2.7, as installed above; this requires an NVIDIA driver that supports CUDA 12.8 (R570 or newer). The previous CUDA 12.4 / PyTorch 2.6 environment ships no kernels for these GPUs and fails with `CUDA error: no kernel image is available for execution on the device`. `--no-build-isolation` lets the flash-attn installer see the installed PyTorch and download the matching prebuilt wheel, which includes Blackwell kernels, instead of building from source.
+
+Tested GPU:
+- NVIDIA RTX PRO 6000 Blackwell Server Edition
+
 ### Model Download
 
 | Models | Description | Download Link |
