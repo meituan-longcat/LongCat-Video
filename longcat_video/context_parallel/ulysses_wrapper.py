@@ -1,7 +1,40 @@
+import os
+
 import torch
 import torch.distributed as dist
 
 from ..context_parallel import context_parallel_util
+
+
+_A2A_OUTPUT_WORKSPACES = {}
+# Keep enough outputs in flight to avoid reusing NCCL storage before its reorder copy finishes.
+_A2A_OUTPUT_WORKSPACE_SLOTS = 16
+
+
+def _get_a2a_output(tensor):
+    key = (tensor.device, tensor.dtype)
+    required = tensor.numel()
+    state = _A2A_OUTPUT_WORKSPACES.setdefault(
+        key, {"slots": [None] * _A2A_OUTPUT_WORKSPACE_SLOTS, "next": 0}
+    )
+    slot = state["next"]
+    state["next"] = (slot + 1) % _A2A_OUTPUT_WORKSPACE_SLOTS
+    workspace = state["slots"][slot]
+
+    if workspace is None or workspace[0].numel() < required:
+        if workspace is not None and workspace[2]:
+            workspace[1].synchronize()
+        workspace = (
+            torch.empty(required, device=tensor.device, dtype=tensor.dtype),
+            torch.cuda.Event(),
+            False,
+        )
+        state["slots"][slot] = workspace
+
+    if workspace[2]:
+        workspace[1].synchronize()
+
+    return workspace[0][:required].view(tensor.shape), state, slot
 
 
 def all_to_all(tensor, scatter_idx, gather_idx, group=None, gather=True):
@@ -47,7 +80,14 @@ def all_to_all(tensor, scatter_idx, gather_idx, group=None, gather=True):
     tensor = chunk_tensor(tensor, scatter_idx)
 
     # Perform all2all
-    output = torch.empty_like(tensor)
+    use_workspace = (
+        os.environ.get("LONGCAT_A2A_WORKSPACE", "1") != "0"
+        and not torch.is_grad_enabled()
+    )
+    if use_workspace:
+        output, workspace_state, workspace_slot = _get_a2a_output(tensor)
+    else:
+        output = torch.empty_like(tensor)
     dist.all_to_all_single(output, tensor, group=group)
 
     # output: e.g., [world_size, B, chunked_H, chunked_S, D] if scatter_idx == 1, gather_idx == 2 -> [B, chunked_H, S, D]
@@ -79,6 +119,11 @@ def all_to_all(tensor, scatter_idx, gather_idx, group=None, gather=True):
         return tensor
 
     output = reorder_tensor(output, gather_idx)
+
+    if use_workspace:
+        workspace = workspace_state["slots"][workspace_slot]
+        workspace[1].record(torch.cuda.current_stream(tensor.device))
+        workspace_state["slots"][workspace_slot] = (*workspace[:2], True)
 
     return output
 
