@@ -35,7 +35,7 @@ MINIMAX_ENDPOINTS = {
     "global_en": "https://api.minimax.io/v1",
     "cn_zh": "https://api.minimaxi.com/v1",
 }
-MINIMAX_TEXT_MODEL_IDS = ("MiniMax-M3", "MiniMax-M2.7")
+MINIMAX_TEXT_MODEL_IDS = ("MiniMax-M3.1-Flash", "MiniMax-M3")
 MINIMAX_IMAGE_MODEL_IDS = ("MiniMax-M3",)
 MINIMAX_TEXT_MODEL = MINIMAX_TEXT_MODEL_IDS[0]
 MINIMAX_IMAGE_MODEL = MINIMAX_IMAGE_MODEL_IDS[0]
@@ -121,10 +121,8 @@ def get_minimax_client():
 
 
 def get_minimax_text_model():
-    model = os.getenv("MINIMAX_TEXT_MODEL", MINIMAX_TEXT_MODEL)
-    if model not in MINIMAX_TEXT_MODEL_IDS:
-        raise ValueError(f"Unsupported MINIMAX_TEXT_MODEL: {model}")
-    return model
+    # Keep explicit legacy/custom IDs separate from the recommended models.
+    return os.getenv("MINIMAX_TEXT_MODEL", MINIMAX_TEXT_MODEL)
 
 
 def get_minimax_image_model():
