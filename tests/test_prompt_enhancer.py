@@ -145,20 +145,28 @@ class PromptEnhancerMiniMaxTest(unittest.TestCase):
             "MINIMAX_TEXT_MODEL": "custom-model",
         }, "custom-model", "https://example.test/v1")
 
-    def test_image_prompt_uses_image_capable_model(self):
-        client = FakeClient()
+    def test_image_prompt_supports_current_image_capable_models(self):
+        self.assertEqual(
+            prompt_enhancer.MINIMAX_IMAGE_MODEL_IDS,
+            prompt_enhancer.MINIMAX_TEXT_MODEL_IDS,
+        )
 
-        compressed_image = types.SimpleNamespace(read=lambda: b"abc")
-        with mock.patch.dict(os.environ, {}, clear=True), \
-                mock.patch.object(prompt_enhancer, "get_minimax_client", return_value=client), \
-                mock.patch.object(prompt_enhancer, "compress_image", return_value=compressed_image), \
-                mock.patch.object(prompt_enhancer, "encode_image", return_value="encoded"):
-            result = prompt_enhancer.enhance_prompt_i2v("image.png", "make a short video")
+        for model in prompt_enhancer.MINIMAX_IMAGE_MODEL_IDS:
+            with self.subTest(model=model):
+                client = FakeClient()
+                compressed_image = types.SimpleNamespace(read=lambda: b"abc")
+                with mock.patch.dict(os.environ, {"MINIMAX_IMAGE_MODEL": model}, clear=True), \
+                        mock.patch.object(prompt_enhancer, "get_minimax_client", return_value=client), \
+                        mock.patch.object(prompt_enhancer, "compress_image", return_value=compressed_image), \
+                        mock.patch.object(prompt_enhancer, "encode_image", return_value="encoded"):
+                    result = prompt_enhancer.enhance_prompt_i2v(
+                        "image.png", "make a short video",
+                    )
 
-        self.assertEqual(result, "enhanced prompt")
-        call = client.completions.calls[0]
-        self.assertEqual(call["model"], "MiniMax-M3")
-        self.assertEqual(call["messages"][1]["content"][1]["type"], "image_url")
+                self.assertEqual(result, "enhanced prompt")
+                call = client.completions.calls[0]
+                self.assertEqual(call["model"], model)
+                self.assertEqual(call["messages"][1]["content"][1]["type"], "image_url")
 
 
 if __name__ == "__main__":
