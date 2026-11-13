@@ -81,7 +81,7 @@ def all_to_all(tensor, scatter_idx, gather_idx, group=None, gather=True):
 
     # Perform all2all
     use_workspace = (
-        os.environ.get("LONGCAT_A2A_WORKSPACE", "1") != "0"
+        os.environ.get("LONGCAT_A2A_WORKSPACE", "0") != "0"
         and not torch.is_grad_enabled()
     )
     if use_workspace:
