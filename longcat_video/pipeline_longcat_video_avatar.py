@@ -146,6 +146,99 @@ class LongCatVideoAvatarPipeline:
             self.use_vcond = False
             self._num_distill_sample_steps = 8
 
+    @staticmethod
+    def _cp_tile_bounds(rank, split_h, split_w, height, width, overlap):
+        row, col = divmod(rank, split_w)
+        core_h, core_w = height // split_h, width // split_w
+        return (
+            max(0, row * core_h - overlap),
+            min(height, (row + 1) * core_h + overlap),
+            max(0, col * core_w - overlap),
+            min(width, (col + 1) * core_w + overlap),
+        )
+
+    def _decode_video_latents(self, latents):
+        cp_size = context_parallel_util.get_cp_size()
+        if cp_size == 1:
+            return self.vae.decode(latents, return_dict=False)[0]
+
+        cp_rank = context_parallel_util.get_cp_rank()
+        cp_group = context_parallel_util.get_cp_group()
+        cp_ranks = context_parallel_util.get_cp_rank_list()
+        split_h, split_w = context_parallel_util.get_optimal_split(cp_size)
+        height, width = latents.shape[-2:]
+        if height % split_h or width % split_w:
+            raise ValueError(
+                f"VAE tile shape {(height, width)} must be divisible by CP split {(split_h, split_w)}"
+            )
+
+        scale = self.vae.spatial_compression_ratio
+        overlap = max(
+            1,
+            (self.vae.tile_sample_min_height - self.vae.tile_sample_stride_height) // scale,
+        )
+        top, bottom, left, right = self._cp_tile_bounds(
+            cp_rank, split_h, split_w, height, width, overlap
+        )
+        local_tile = self.vae.decode(
+            latents[..., top:bottom, left:right].contiguous(), return_dict=False
+        )[0].contiguous()
+
+        if cp_rank == 0:
+            tiles = [local_tile]
+            for tile_rank in range(1, cp_size):
+                tile_top, tile_bottom, tile_left, tile_right = self._cp_tile_bounds(
+                    tile_rank, split_h, split_w, height, width, overlap
+                )
+                tile = torch.empty(
+                    (*local_tile.shape[:3], (tile_bottom - tile_top) * scale, (tile_right - tile_left) * scale),
+                    dtype=local_tile.dtype,
+                    device=local_tile.device,
+                )
+                torch.distributed.recv(tile, src=cp_ranks[tile_rank])
+                tiles.append(tile)
+
+            output_shape = (*local_tile.shape[:3], height * scale, width * scale)
+            output_sum = torch.zeros(output_shape, dtype=torch.float32, device=local_tile.device)
+            weight_sum = torch.zeros((1, 1, 1, height * scale, width * scale), dtype=torch.float32, device=local_tile.device)
+            overlap_pixels = overlap * scale
+
+            for tile_rank, tile in enumerate(tiles):
+                row, col = divmod(tile_rank, split_w)
+                tile_top, tile_bottom, tile_left, tile_right = self._cp_tile_bounds(
+                    tile_rank, split_h, split_w, height, width, overlap
+                )
+                tile_h, tile_w = tile.shape[-2:]
+                weight_h = torch.ones(tile_h, dtype=torch.float32, device=tile.device)
+                weight_w = torch.ones(tile_w, dtype=torch.float32, device=tile.device)
+                blend_h = min(2 * overlap_pixels, tile_h)
+                blend_w = min(2 * overlap_pixels, tile_w)
+                if row > 0:
+                    weight_h[:blend_h] = torch.linspace(0, 1, blend_h, device=tile.device)
+                if row + 1 < split_h:
+                    weight_h[-blend_h:] *= torch.linspace(1, 0, blend_h, device=tile.device)
+                if col > 0:
+                    weight_w[:blend_w] = torch.linspace(0, 1, blend_w, device=tile.device)
+                if col + 1 < split_w:
+                    weight_w[-blend_w:] *= torch.linspace(1, 0, blend_w, device=tile.device)
+                weight = weight_h[:, None] * weight_w[None, :]
+                sample_top, sample_bottom = tile_top * scale, tile_bottom * scale
+                sample_left, sample_right = tile_left * scale, tile_right * scale
+                output_sum[..., sample_top:sample_bottom, sample_left:sample_right] += tile.float() * weight
+                weight_sum[..., sample_top:sample_bottom, sample_left:sample_right] += weight
+
+            output_video = (output_sum / weight_sum.clamp_min_(1e-6)).to(local_tile.dtype)
+        else:
+            torch.distributed.send(local_tile, dst=cp_ranks[0])
+            output_video = torch.empty(
+                (*local_tile.shape[:3], height * scale, width * scale),
+                dtype=local_tile.dtype,
+                device=local_tile.device,
+            )
+
+        torch.distributed.broadcast(output_video, src=cp_ranks[0], group=cp_group)
+        return output_video
+
     def _get_t5_prompt_embeds(
         self,
         prompt: Union[str, List[str]] = None,
@@ -214,6 +307,20 @@ class LongCatVideoAvatarPipeline:
                 torch dtype
         """
 
+        prompt_cache_key = (
+            tuple([prompt] if isinstance(prompt, str) else prompt),
+            None if negative_prompt is None else tuple(
+                [negative_prompt] if isinstance(negative_prompt, str) else negative_prompt
+            ),
+            do_classifier_free_guidance,
+            num_videos_per_prompt,
+            max_sequence_length,
+            str(device),
+            dtype,
+        )
+        if getattr(self, "_prompt_cache_key", None) == prompt_cache_key:
+            return self._prompt_cache
+
         prompt = [prompt] if isinstance(prompt, str) else prompt
         batch_size = len(prompt)
 
@@ -246,7 +353,15 @@ class LongCatVideoAvatarPipeline:
             negative_prompt_embeds = None
             negative_prompt_attention_mask = None
             
-        return prompt_embeds, prompt_attention_mask, negative_prompt_embeds, negative_prompt_attention_mask
+        result = (
+            prompt_embeds,
+            prompt_attention_mask,
+            negative_prompt_embeds,
+            negative_prompt_attention_mask,
+        )
+        self._prompt_cache_key = prompt_cache_key
+        self._prompt_cache = result
+        return result
 
     def check_inputs(
         self,
@@ -535,14 +650,18 @@ class LongCatVideoAvatarPipeline:
         else:
             raise NotImplementedError(f"Not supported resize_mode {resize_mode}")
 
-    def get_audio_embedding(self, speech_array, fps=32, device='cpu', sample_rate=16000, model_type="avatar-v1.0"):
+    def get_audio_embedding(self, speech_array, fps=32, device='cpu', sample_rate=16000,
+                            model_type="avatar-v1.0", use_loudness_norm=True):
         if model_type == "avatar-v1.0":
             return self.get_audio_embedding_wav2vec2(speech_array, fps, device, sample_rate)
         if model_type == "avatar-v1.5":
-            return self.get_audio_embedding_whisper(speech_array, fps, device, sample_rate)
+            return self.get_audio_embedding_whisper(
+                speech_array, fps, device, sample_rate, use_loudness_norm=use_loudness_norm
+            )
 
     @torch.no_grad()
-    def get_audio_embedding_whisper(self, speech_array, fps=25, device='cpu', sample_rate=16000):
+    def get_audio_embedding_whisper(self, speech_array, fps=25, device='cpu', sample_rate=16000,
+                                    use_loudness_norm=True):
         """使用 Whisper encoder 提取音频特征。
         Args:
             speech_array: 原始音频波形 (numpy array, 单声道, sample_rate=16000)
@@ -577,7 +696,8 @@ class LongCatVideoAvatarPipeline:
         video_length   = int(audio_duration * fps)
 
         # ---- 音频预处理 ----
-        speech_array = self._loudness_norm(speech_array, sample_rate)
+        if use_loudness_norm:
+            speech_array = self._loudness_norm(speech_array, sample_rate)
 
         # ---- Whisper feature extractor：wav → mel spectrogram ----
         mel_chunks = []
@@ -807,6 +927,8 @@ class LongCatVideoAvatarPipeline:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
                     continue
+                if self.dit.lora_mix_config is not None:
+                    self.dit.set_lora_mix_step(i)
 
                 self._current_timestep = t
 
@@ -857,7 +979,7 @@ class LongCatVideoAvatarPipeline:
 
         latents = latents.to(self.vae.dtype)
         latents = self.denormalize_latents(latents)
-        output_video = self.vae.decode(latents, return_dict=False)[0]
+        output_video = self._decode_video_latents(latents)
         output_video = self.video_processor.postprocess_video(output_video)
 
         if output_type == 'both':
@@ -1052,10 +1174,13 @@ class LongCatVideoAvatarPipeline:
         if context_parallel_util.get_cp_size() > 1:
             torch.distributed.barrier(group=context_parallel_util.get_cp_group())
 
+
         with tqdm(total=len(timesteps), desc="Denoising") as progress_bar:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
                     continue
+                if self.dit.lora_mix_config is not None:
+                    self.dit.set_lora_mix_step(i)
 
                 self._current_timestep = t
 
@@ -1129,6 +1254,7 @@ class LongCatVideoAvatarPipeline:
                 if i == len(timesteps) - 1 or (i + 1) % self.scheduler.order == 0:
                     progress_bar.update()
 
+
         self._current_timestep = None
 
         if output_type == 'latent':
@@ -1139,7 +1265,7 @@ class LongCatVideoAvatarPipeline:
 
         latents = latents.to(self.vae.dtype)
         latents = self.denormalize_latents(latents)
-        output_video = self.vae.decode(latents, return_dict=False)[0]
+        output_video = self._decode_video_latents(latents)
         output_video = self.video_processor.postprocess_video(output_video)
 
         if output_type == 'both':
@@ -1380,6 +1506,7 @@ class LongCatVideoAvatarPipeline:
         if context_parallel_util.get_cp_size() > 1:
             torch.distributed.barrier(group=context_parallel_util.get_cp_group())
 
+
         if use_kv_cache:
             cond_latents = latents[:, :, :num_cond_latents]
             self._cache_clean_latents(cond_latents, max_sequence_length, offload_kv_cache=offload_kv_cache, device=self.device, dtype=dit_dtype, \
@@ -1393,6 +1520,8 @@ class LongCatVideoAvatarPipeline:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
                     continue
+                if self.dit.lora_mix_config is not None:
+                    self.dit.set_lora_mix_step(i)
 
                 self._current_timestep = t
 
@@ -1417,7 +1546,7 @@ class LongCatVideoAvatarPipeline:
                         num_ref_latents=num_ref_latents, 
                         ref_img_index=ref_img_index,
                         mask_frame_range=mask_frame_range,
-                        ref_target_masks=ref_target_masks
+                        ref_target_masks=ref_target_masks,
                     )
                     noise_pred_cond = self.dit(
                         hidden_states=latent_model_input[1:], 
@@ -1430,7 +1559,7 @@ class LongCatVideoAvatarPipeline:
                         num_ref_latents=num_ref_latents, 
                         ref_img_index=ref_img_index,
                         mask_frame_range=mask_frame_range,
-                        ref_target_masks=ref_target_masks
+                        ref_target_masks=ref_target_masks,
                     )
                     noise_pred = torch.cat([noise_pred_uncond_text, noise_pred_cond])
                 else:
@@ -1496,6 +1625,7 @@ class LongCatVideoAvatarPipeline:
 
             latents[:, :, :num_cond_latents] = cond_videos_latents
 
+
         self._current_timestep = None
 
         if output_type == 'latent':
@@ -1506,7 +1636,7 @@ class LongCatVideoAvatarPipeline:
 
         latents = latents.to(self.vae.dtype)
         latents = self.denormalize_latents(latents)
-        output_video = self.vae.decode(latents, return_dict=False)[0]
+        output_video = self._decode_video_latents(latents)
         output_video = self.video_processor.postprocess_video(output_video)
 
         if output_type == 'both':
@@ -1539,4 +1669,3 @@ class LongCatVideoAvatarPipeline:
         if self.vae is not None:
             self.vae = self.vae.to(device, non_blocking=True)
         return self
-    
