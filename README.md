@@ -13,6 +13,13 @@
   <a href='https://huggingface.co/meituan-longcat/LongCat-Video'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a>
 </div>
 <div align="center" style="line-height: 1;">
+  <img src='assets/longcat_video_avatar_1.6_title.svg' alt="LongCat-Video-Avatar 1.6">
+  <a href='https://meigen-ai.github.io/LongCat-Video-Avatar-1.6-Page/'><img src='https://img.shields.io/badge/Project-Page-green'></a>
+  <a href='https://github.com/meituan-longcat/LongCat-Video/blob/main/assets/LongCat-Video-Avatar-1.6-Tech-Report.pdf'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
+  <a href='https://huggingface.co/meituan-longcat/LongCat-Video-Avatar-1.6'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Model-blue'></a>
+  <a href='https://www.modelscope.cn/models/meituan-longcat/LongCat-Video-Avatar-1.6'><img src='https://img.shields.io/badge/ModelScope-Model-purple'></a>
+</div>
+<div align="center" style="line-height: 1;">
   <img src='assets/longcat_video_avatar_1.5_title.svg' alt="LongCat-Video-Avatar 1.5">
   <a href='https://meigen-ai.github.io/LongCat-Video-Avatar-1.5-Page/'><img src='https://img.shields.io/badge/Project-Page-green'></a>
   <a href='https://github.com/meituan-longcat/LongCat-Video/blob/main/assets/LongCat-Video-Avatar-1.5-Tech-Report.pdf'><img src='https://img.shields.io/badge/Technique-Report-red'></a>
@@ -46,6 +53,7 @@ For more detail, please refer to the comprehensive [***LongCat-Video Technical R
 </div>
 
 ## 🔥 Latest News!!
+- Nov 15, 2026: 🚀 We release [***LongCat-Video-Avatar 1.6***](https://meigen-ai.github.io/LongCat-Video-Avatar-1.6-Page/), an upgraded open-source framework for audio-driven human video generation. Building on LongCat-Video-Avatar 1.5, v1.6 delivers more natural lip movements and expressive facial, head, and body motion, while reducing error accumulation during long-form generation. A refined post-training pipeline combining reinforcement learning, improved classifier-free guidance for DMD-based few-step distillation, long-video rollouts, and on-policy distillation enables videos exceeding 10 minutes with improved visual quality and temporal consistency. Comprehensive inference optimizations further accelerate end-to-end generation and deployment.[ [***code***](https://github.com/meituan-longcat/LongCat-Video) | 🤗 [***weights***](https://huggingface.co/meituan-longcat/LongCat-Video-Avatar-1.6) | [***project page***](https://meigen-ai.github.io/LongCat-Video-Avatar-1.6-Page/) ]
 - May 21, 2026: 🚀 We release [***LongCat-Video-Avatar-1.5***](https://meigen-ai.github.io/LongCat-Video-Avatar-1.5-Page/), an upgraded open-source framework for audio-driven human video generation. v1.5 replaces Wav2Vec2 with Whisper-Large for more accurate lip synchronization, achieves production-ready physical rationality and temporal stability with robust long-video generation, generalizes to stylized domains (anime, animals, complex real-world conditions), supports both single-stream and multi-stream audio inputs, and accelerates inference to 8 steps via step distillation. [ [***code***](https://github.com/meituan-longcat/LongCat-Video) | 🤗 [***weights***](https://huggingface.co/meituan-longcat/LongCat-Video-Avatar-1.5) | [***project page***](https://meigen-ai.github.io/LongCat-Video-Avatar-1.5-Page/) ]
 - Dec 16, 2025: 🚀 We are excited to announce the release of [***LongCat-Video-Avatar***](https://meigen-ai.github.io/LongCat-Video-Avatar/), a unified model that delivers expressive and highly dynamic audio-driven character animation, supporting native tasks including *Audio-Text-to-Video*, *Audio-Text-Image-to-Video*, and *Video Continuation* with seamless compatibility for both *single-stream* and *multi-stream* audio inputs. The release includes our [***Technical Report***](https://github.com/meituan-longcat/LongCat-Video), [***inference code***](https://github.com/meituan-longcat/LongCat-Video), 🤗 [***model weights***](https://huggingface.co/meituan-longcat/LongCat-Video-Avatar), and [***project page***](https://meigen-ai.github.io/LongCat-Video-Avatar/).
 - Oct 25, 2025: 🚀 We've released LongCat-Video, a foundational video generation model.  Tech report and models are available at [***LongCat-Video Technical Report***](https://arxiv.org/abs/2510.22200) and 🤗 [***Huggingface***](https://huggingface.co/meituan-longcat/LongCat-Video) !
@@ -98,6 +106,7 @@ FlashAttention-2 is enabled in the model config by default; you can also change 
 | LongCat-Video | foundational video generation | 🤗 [Huggingface](https://huggingface.co/meituan-longcat/LongCat-Video) |
 | LongCat-Video-Avatar | single- and multi-character audio-driven video generation (wav2vec2) | 🤗 [Huggingface](https://huggingface.co/meituan-longcat/LongCat-Video-Avatar) |
 | LongCat-Video-Avatar-1.5 | upgraded avatar model with Whisper-large-v3 audio encoder, distillation-based fast inference | 🤗 [Huggingface](https://huggingface.co/meituan-longcat/LongCat-Video-Avatar-1.5) |
+| LongCat-Video-Avatar-1.6 | Improves the naturalness of speech-related mouth movements and reduces error accumulation during long-video generation | 🤗 [Huggingface](https://huggingface.co/meituan-longcat/LongCat-Video-Avatar-1.6) |
 
 Download models using huggingface-cli:
 ```shell
@@ -105,6 +114,7 @@ pip install "huggingface_hub[cli]"
 huggingface-cli download meituan-longcat/LongCat-Video --local-dir ./weights/LongCat-Video
 huggingface-cli download meituan-longcat/LongCat-Video-Avatar --local-dir ./weights/LongCat-Video-Avatar
 huggingface-cli download meituan-longcat/LongCat-Video-Avatar-1.5 --local-dir ./weights/LongCat-Video-Avatar-1.5
+huggingface-cli download meituan-longcat/LongCat-Video-Avatar-1.6 --local-dir ./weights/LongCat-Video-Avatar-1.6
 ```
 
 ### Run Text-to-Video
@@ -158,6 +168,50 @@ torchrun --nproc_per_node=2 run_demo_interactive_video.py --context_parallel_siz
 ```
 
 ### Run LongCat-Video-Avatar
+
+<details>
+<summary>💡 User tips for 1.6</summary>
+
+1. The Avatar 1.6 checkpoint uses the same Avatar 1.5 architecture and adds two LoRAs:
+
+- `loraA/lora.safetensors`: DMD LoRA.
+- `loraB/lora.safetensors`: OPSD LoRA.
+- `base_model_int8`: optional weight-only INT8 DiT, enabled by `--use_int8`.
+
+With `--mix_steps=N`, the first `N` denoising steps use
+`mix_alpha * DMD + (1 - mix_alpha) * OPSD`; the remaining `8 - N` steps use
+OPSD only. The default settings are `--mix_steps=4 --mix_alpha=1.0`, which
+disable mixing and load the single LoRA given by `--lora_path`. Increasing
+`--mix_steps` and `--mix_alpha` gives the DMD LoRA more influence during the
+early denoising steps, which can improve structural stability and reduce
+visual distortions.
+
+2. **FP8 dependency and INT8 exclusivity:** Install Transformer Engine with
+   PyTorch/CUDA support before using `--use_fp8`. Do not use `--use_fp8` and
+   `--use_int8` together; enable only one quantization mode at a time. If output
+   quality is more important, reduce the number of layers that use FP8.
+
+3. **Compilation warm-up:** When `--compile_dit` and `--compile_vae` are enabled, the first few inference runs include graph tracing and compilation overhead and may be slower due to cold start. Subsequent runs with the same input shapes reuse the compiled graphs and run significantly faster. New input shapes may trigger recompilation.
+
+4. **FlashAttention 3:** For Hopper GPUs such as H20, H100, H200, and H800, make sure FlashAttention 3 is installed and enabled. FA3 can provide a significant inference speedup compared with FA2. Confirm that the model configuration contains:
+
+   ```json
+   {
+     "enable_flashattn3": true,
+     "enable_flashattn2": false
+   }
+   ```
+
+5. **Multi-GPU communication:** When running with more than 2 GPUs, enable the optimized All-to-All workspace to reduce context-parallel communication overhead:
+
+   ```shell
+   export LONGCAT_A2A_WORKSPACE=1
+   ```
+
+   Set `--nproc_per_node` and `--context_parallel_size` to the corresponding GPU count.
+
+</details>
+
 <details>
 <summary>💡 User tips for 1.5</summary>
 
@@ -166,9 +220,9 @@ torchrun --nproc_per_node=2 run_demo_interactive_video.py --context_parallel_siz
 > - **Mitigate repeated actions:** Setting the reference image index（--ref_img_index, default to 10） between 0 and 24 ensures better consistency; setting it to 30 helps reduce repeated actions. Additionally, increasing the mask frame range (--mask_frame_range, default to 3) can further help mitigate repeated actions, but excessively large values may introduce artifacts.
 > - **Super resolution:** Our model is compatible with both 480P and 720P, which can be controlled via --resolution.
 > - **Dual-Audio Modes:** Merge mode (set audio_type to para) requires two audio clips of equal length, and the resulting audio is obtained by summing the two clips; Concatenation mode (set audio_type to add) does not require equal-length inputs, and the resulting audio is formed by sequentially concatenating the two clips with silence padding for any gaps, where by default person1 speaks first and person2 speaks afterward.
-> - **Model versions:** `--model_type avatar-v1.0` uses wav2vec2 audio encoder (default); `--model_type avatar-v1.5` uses Whisper-large-v3 audio encoder for better lip sync quality.
-> - **Distillation mode:** Add `--use_distill` to enable distillation sampling (fewer steps, faster inference). This is **required** when using `--model_type avatar-v1.5`.
-> - **INT8 quantization:** Add `--use_int8` to load the INT8 quantized DiT model for reduced VRAM usage. Only supported with `--model_type avatar-v1.5`.
+> - **Model versions:** `--model_type avatar-v1.0` uses wav2vec2 (default); `--model_type avatar-v1.5` uses Whisper-large-v3; 
+> - **Distillation mode:** Add `--use_distill` to enable 8-step inference. It is required for Avatar 1.5 examples and for Avatar 1.6 LoRA mixing.
+> - **INT8 quantization:** Add `--use_int8` to load `base_model_int8` instead of `base_model`. It is supported with `avatar-v1.5`.
 
 </details>
 
@@ -183,30 +237,30 @@ torchrun --nproc_per_node=2 run_demo_interactive_video.py --context_parallel_siz
 
 </details>
 
-#### LongCat-Video-Avatar-1.5
+#### LongCat-Video-Avatar-1.6
 
 - Single-Audio-to-Video Generation
 ```shell
 # Audio-Text-to-Video
-torchrun --nproc_per_node=2 run_demo_avatar_single_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.5 --stage_1=at2v --input_json=assets/avatar/single_example_1.json --use_distill --model_type avatar-v1.5 --use_int8
+torchrun --nproc_per_node=2 run_demo_avatar_single_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.6 --stage_1=at2v --input_json=assets/avatar/single_example_1.json --use_distill --lora_path loraB/lora.safetensors --model_type avatar-v1.6 --mix_steps=4 --mix_alpha=1.0
 
 # Audio-Image-to-Video
-torchrun --nproc_per_node=2 run_demo_avatar_single_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.5 --stage_1=ai2v --input_json=assets/avatar/single_example_1.json --use_distill --model_type avatar-v1.5 --use_int8
+torchrun --nproc_per_node=2 run_demo_avatar_single_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.6 --stage_1=ai2v --input_json=assets/avatar/single_example_1.json --use_distill --lora_path loraB/lora.safetensors --model_type avatar-v1.6 --mix_steps=4 --mix_alpha=1.0
 
 # Audio-Text-to-Video and Video-Continuation
-torchrun --nproc_per_node=2 run_demo_avatar_single_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.5 --stage_1=at2v --input_json=assets/avatar/single_example_1.json --num_segments=5 --ref_img_index=10 --mask_frame_range=3 --use_distill --model_type avatar-v1.5 --use_int8
+torchrun --nproc_per_node=2 run_demo_avatar_single_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.6 --stage_1=at2v --input_json=assets/avatar/single_example_1.json --num_segments=5 --ref_img_index=10 --mask_frame_range=0 --use_distill --lora_path loraB/lora.safetensors --model_type avatar-v1.6 --mix_steps=4 --mix_alpha=1.0
 
 # Audio-Image-to-Video and Video-Continuation
-torchrun --nproc_per_node=2 run_demo_avatar_single_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.5 --stage_1=ai2v --input_json=assets/avatar/single_example_1.json --num_segments=5 --ref_img_index=10 --mask_frame_range=3 --use_distill --model_type avatar-v1.5 --use_int8
+torchrun --nproc_per_node=2 run_demo_avatar_single_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.6 --stage_1=ai2v --input_json=assets/avatar/single_example_1.json --num_segments=5 --ref_img_index=10 --mask_frame_range=0 --use_distill --lora_path loraB/lora.safetensors --model_type avatar-v1.6 --mix_steps=4 --mix_alpha=1.0
 ```
 
 - Multi-Audio-to-Video Generation
 ```shell
 # Audio-Image-to-Video
-torchrun --nproc_per_node=2 run_demo_avatar_multi_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.5 --input_json=assets/avatar/multi_example_1.json --use_distill --model_type avatar-v1.5 --use_int8
+torchrun --nproc_per_node=2 run_demo_avatar_multi_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.6 --input_json=assets/avatar/multi_example_1.json --use_distill --lora_path loraB/lora.safetensors --model_type avatar-v1.6 --mix_steps=4 --mix_alpha=1.0
 
 # Audio-Image-to-Video and Video-Continuation
-torchrun --nproc_per_node=2 run_demo_avatar_multi_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.5 --input_json=assets/avatar/multi_example_1.json --num_segments=5 --ref_img_index=10 --mask_frame_range=3 --use_distill --model_type avatar-v1.5 --use_int8
+torchrun --nproc_per_node=2 run_demo_avatar_multi_audio_to_video.py --context_parallel_size=2 --checkpoint_dir=./weights/LongCat-Video-Avatar-1.6 --input_json=assets/avatar/multi_example_1.json --num_segments=5 --ref_img_index=10 --mask_frame_range=0 --use_distill --lora_path loraB/lora.safetensors --model_type avatar-v1.6 --mix_steps=4 --mix_alpha=1.0
 ```
 
 ### Run Streamlit

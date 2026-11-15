@@ -126,10 +126,10 @@ class Attention(nn.Module):
         q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
+        q, k = self.rope_3d(q, k, shape, ref_img_index, num_ref_latents)
+
         if return_kv:
             k_cache, v_cache = k.clone(), v.clone()
-
-        q, k = self.rope_3d(q, k, shape, ref_img_index, num_ref_latents)
 
         N_t, N_h, N_w = shape
         # cond mode
@@ -232,11 +232,16 @@ class Attention(nn.Module):
             v_cache = v_cache.repeat(B, 1, 1, 1)
         
         if num_cond_latents is not None and num_cond_latents > 0:
+            q, k = self.rope_3d(
+                q,
+                k,
+                (N_t + num_cond_latents, N_h, N_w),
+                ref_img_index,
+                num_ref_latents,
+                token_offset=k_cache.shape[2],
+            )
             k_full = torch.cat([k_cache, k], dim=2).contiguous()
             v_full = torch.cat([v_cache, v], dim=2).contiguous()
-            q_padding = torch.cat([torch.empty_like(k_cache), q], dim=2).contiguous()
-            q_padding, k_full = self.rope_3d(q_padding, k_full, (N_t + num_cond_latents, N_h, N_w), ref_img_index, num_ref_latents)
-            q = q_padding[:, :, -N:].contiguous()
         
         start_noise, end_noise, num_noisy_frames = 0, 0, N_t
         if mask_frame_range is not None and mask_frame_range > 0:

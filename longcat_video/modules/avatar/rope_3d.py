@@ -39,6 +39,8 @@ def rotate_half(x):
 
 class RotaryPositionalEmbedding(nn.Module):
 
+    _gpu_cos_sin_cache = {}
+
     def __init__(self,
                  head_dim,
                  cp_split_hw=None
@@ -57,6 +59,9 @@ class RotaryPositionalEmbedding(nn.Module):
         # We take the assumption that the longest side of grid will not larger than 512, i.e, 512 * 8 = 4098 input pixels
         self.base = 10000
         self.freqs_dict = {}
+
+    def clear_gpu_cache(self):
+        self._gpu_cos_sin_cache.clear()
 
     def register_grid_size(self, grid_size, key_name, frame_index=None, num_ref_latents=None):
         
@@ -99,7 +104,7 @@ class RotaryPositionalEmbedding(nn.Module):
 
         return freqs
 
-    def forward(self, q, k, grid_size, frame_index=None, num_ref_latents=None):
+    def forward(self, q, k, grid_size, frame_index=None, num_ref_latents=None, token_offset=0):
         """3D RoPE.
 
         Args:
@@ -112,11 +117,29 @@ class RotaryPositionalEmbedding(nn.Module):
         if key_name not in self.freqs_dict:
             self.register_grid_size(grid_size, key_name, frame_index, num_ref_latents)
 
-        freqs_cis = self.freqs_dict[key_name].to(q.device)
         q_, k_ = q.float(), k.float()
-        freqs_cis = freqs_cis.float().to(q.device)
-        cos, sin = freqs_cis.cos(), freqs_cis.sin()
-        cos, sin = rearrange(cos, 'n d -> 1 1 n d'), rearrange(sin, 'n d -> 1 1 n d')
+        cache_key = (
+            self.head_dim,
+            tuple(self.cp_split_hw or ()),
+            key_name,
+            q.device.type,
+            q.device.index,
+        )
+        cached = self._gpu_cos_sin_cache.get(cache_key)
+        if cached is None:
+            # Keep the original FP32 path exactly; only reuse its immutable result.
+            freqs_cis = self.freqs_dict[key_name].to(q.device)
+            freqs_cis = freqs_cis.float().to(q.device)
+            cos, sin = freqs_cis.cos(), freqs_cis.sin()
+            cos = rearrange(cos, 'n d -> 1 1 n d')
+            sin = rearrange(sin, 'n d -> 1 1 n d')
+            cached = (cos, sin)
+            self._gpu_cos_sin_cache[cache_key] = cached
+        cos, sin = cached
+        token_count = q.shape[-2]
+        cos = cos[:, :, token_offset:token_offset + token_count]
+        sin = sin[:, :, token_offset:token_offset + token_count]
+        assert cos.shape[-2] == token_count
         q_ = (q_ * cos) + (rotate_half(q_) * sin)
         k_ = (k_ * cos) + (rotate_half(k_) * sin)
 

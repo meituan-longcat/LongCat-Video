@@ -165,6 +165,8 @@ class WanCausalConv3d(nn.Conv3d):
         # Set up causal padding
         self._padding = (self.padding[2], self.padding[2], self.padding[1], self.padding[1], 2 * self.padding[0], 0)
         self.padding = (0, 0, 0)
+        self.fuse_spatial_padding = False
+        self.keep_cache_views = False
 
     def forward(self, x, cache_x=None):
         padding = list(self._padding)
@@ -172,6 +174,24 @@ class WanCausalConv3d(nn.Conv3d):
             cache_x = cache_x.to(x.device)
             x = torch.cat([cache_x, x], dim=2)
             padding[4] -= cache_x.shape[2]
+
+        if (
+            self.fuse_spatial_padding
+            and padding[4] == 0
+            and padding[5] == 0
+            and padding[0] == padding[1]
+            and padding[2] == padding[3]
+        ):
+            return F.conv3d(
+                x,
+                self.weight,
+                self.bias,
+                self.stride,
+                (0, padding[2], padding[0]),
+                self.dilation,
+                self.groups,
+            )
+
         x = F.pad(x, padding)
         return super().forward(x)
 
@@ -271,7 +291,9 @@ class WanResample(nn.Module):
                     feat_cache[idx] = "Rep"
                     feat_idx[0] += 1
                 else:
-                    cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                    cache_x = x[:, :, -CACHE_T:, :, :]
+                    if not self.time_conv.keep_cache_views:
+                        cache_x = cache_x.clone()
                     if cache_x.shape[2] < 2 and feat_cache[idx] is not None and feat_cache[idx] != "Rep":
                         # cache last frame of last two chunk
                         cache_x = torch.cat(
@@ -298,10 +320,14 @@ class WanResample(nn.Module):
             if feat_cache is not None:
                 idx = feat_idx[0]
                 if feat_cache[idx] is None:
-                    feat_cache[idx] = x.clone()
+                    feat_cache[idx] = x
+                    if not self.time_conv.keep_cache_views:
+                        feat_cache[idx] = feat_cache[idx].clone()
                     feat_idx[0] += 1
                 else:
-                    cache_x = x[:, :, -1:, :, :].clone()
+                    cache_x = x[:, :, -1:, :, :]
+                    if not self.time_conv.keep_cache_views:
+                        cache_x = cache_x.clone()
                     x = self.time_conv(torch.cat([feat_cache[idx][:, :, -1:, :, :], x], 2))
                     feat_cache[idx] = cache_x
                     feat_idx[0] += 1
@@ -349,7 +375,9 @@ class WanResidualBlock(nn.Module):
 
         if feat_cache is not None:
             idx = feat_idx[0]
-            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            cache_x = x[:, :, -CACHE_T:, :, :]
+            if not self.conv1.keep_cache_views:
+                cache_x = cache_x.clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
                 cache_x = torch.cat([feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2)
 
@@ -368,7 +396,9 @@ class WanResidualBlock(nn.Module):
 
         if feat_cache is not None:
             idx = feat_idx[0]
-            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            cache_x = x[:, :, -CACHE_T:, :, :]
+            if not self.conv2.keep_cache_views:
+                cache_x = cache_x.clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
                 cache_x = torch.cat([feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2)
 
@@ -586,7 +616,9 @@ class WanEncoder3d(nn.Module):
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         if feat_cache is not None:
             idx = feat_idx[0]
-            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            cache_x = x[:, :, -CACHE_T:, :, :]
+            if not self.conv_in.keep_cache_views:
+                cache_x = cache_x.clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
                 # cache last frame of last two chunk
                 cache_x = torch.cat([feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2)
@@ -611,7 +643,9 @@ class WanEncoder3d(nn.Module):
         x = self.nonlinearity(x)
         if feat_cache is not None:
             idx = feat_idx[0]
-            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            cache_x = x[:, :, -CACHE_T:, :, :]
+            if not self.conv_out.keep_cache_views:
+                cache_x = cache_x.clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
                 # cache last frame of last two chunk
                 cache_x = torch.cat([feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2)
@@ -875,7 +909,9 @@ class WanDecoder3d(nn.Module):
         ## conv1
         if feat_cache is not None:
             idx = feat_idx[0]
-            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            cache_x = x[:, :, -CACHE_T:, :, :]
+            if not self.conv_in.keep_cache_views:
+                cache_x = cache_x.clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
                 # cache last frame of last two chunk
                 cache_x = torch.cat([feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2)
@@ -897,7 +933,9 @@ class WanDecoder3d(nn.Module):
         x = self.nonlinearity(x)
         if feat_cache is not None:
             idx = feat_idx[0]
-            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            cache_x = x[:, :, -CACHE_T:, :, :]
+            if not self.conv_out.keep_cache_views:
+                cache_x = cache_x.clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
                 # cache last frame of last two chunk
                 cache_x = torch.cat([feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2)
@@ -1131,6 +1169,26 @@ class AutoencoderKLWan(ModelMixin, ConfigMixin, FromOriginalModelMixin):
         decoding in one step.
         """
         self.use_slicing = False
+
+    def enable_decoder_fused_padding(self) -> None:
+        for module in self.decoder.modules():
+            if isinstance(module, WanCausalConv3d):
+                module.fuse_spatial_padding = True
+
+    def enable_decoder_cache_views(self) -> None:
+        for module in self.decoder.modules():
+            if isinstance(module, WanCausalConv3d):
+                module.keep_cache_views = True
+
+    def enable_encoder_fused_padding(self) -> None:
+        for module in self.encoder.modules():
+            if isinstance(module, WanCausalConv3d):
+                module.fuse_spatial_padding = True
+
+    def enable_encoder_cache_views(self) -> None:
+        for module in self.encoder.modules():
+            if isinstance(module, WanCausalConv3d):
+                module.keep_cache_views = True
 
     def clear_cache(self):
         # Use cached conv counts for decoder and encoder to avoid re-iterating modules each call

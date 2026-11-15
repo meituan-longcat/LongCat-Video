@@ -6,7 +6,6 @@ import imageio
 import subprocess
 import numpy as np
 import os.path as osp
-from tqdm import tqdm
 import pyloudnorm as pyln
 from einops import rearrange
 import scipy.signal as ss
@@ -162,85 +161,44 @@ def get_audio_duration(audio_path):
     return float(info["format"]["duration"])
 
 
-def save_video_ffmpeg(gen_video_samples, save_path, audio_path, fps=25, quality=5, high_quality_save=False):
+def save_video_ffmpeg(gen_video_samples, save_path, audio_path, fps=25, quality=10, high_quality_save=False):
+    video = gen_video_samples.cpu().numpy()
+    if video.dtype != np.uint8:
+        video = np.clip(video, 0, 255).astype(np.uint8)
+    video = np.ascontiguousarray(video)
+    frame_count, height, width, channels = video.shape
+    if channels != 3 or frame_count == 0:
+        raise ValueError(f"Expected non-empty RGB video, got shape {video.shape}")
 
-    def save_video(frames, save_path, fps, quality=9, ffmpeg_params=None):
-        writer = imageio.get_writer(
-            save_path, fps=fps, quality=quality, ffmpeg_params=ffmpeg_params
-        )
-        for frame in tqdm(frames, desc="Saving video"):
-            frame = np.array(frame)
-            writer.append_data(frame)
-        writer.close()
-    save_path_tmp = save_path + "-temp.mp4"
-    
-    os.makedirs(os.path.dirname(save_path_tmp), exist_ok=True)
-    video_audio =  gen_video_samples.cpu().numpy()
-    video_audio = np.clip(video_audio, 0, 255).astype(np.uint8)
-    save_video(video_audio, save_path_tmp, fps=fps, quality=quality)
+    output_path = save_path + ".mp4"
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
 
-    # crop audio according to video length
-    T, _, _, _ = gen_video_samples.shape
-    duration = T / fps
-    save_path_crop_audio = save_path + "-cropaudio.wav"
-    final_command = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        audio_path,
-        "-t",
-        f'{duration}',
-        save_path_crop_audio,
-    ]
-    subprocess.run(final_command, check=True)
-
-    # crop video according to audio length
-    crop_audio_duration = get_audio_duration(save_path_crop_audio)
-    save_path_crop_tmp = save_path + "-cropvideo.mp4"
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i", save_path_tmp,
-        "-t", f"{crop_audio_duration}",
-        "-c:v", "copy",
-        "-c:a", "copy",
-        save_path_crop_tmp,
-    ]
-    subprocess.run(cmd, check=True)
-
-    # generate video with audio
-    save_path = save_path + ".mp4"
     if high_quality_save:
-        final_command = [
-            "ffmpeg",
-            "-y",
-            "-i", save_path_crop_tmp,
-            "-i", save_path_crop_audio,
-            "-c:v", "libx264",
-            "-crf", "0",
-            "-preset", "veryslow", 
-            "-c:a", "aac",
-            "-shortest",
-            save_path,
-        ]
-        subprocess.run(final_command, check=True)
+        video_options = ["-c:v", "libx264", "-crf", "0", "-preset", "veryslow"]
     else:
-        final_command = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            save_path_crop_tmp,
-            "-i",
-            save_path_crop_audio,
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac",
-            "-shortest",
-            save_path,
-        ]
-        subprocess.run(final_command, check=True)
-        
-    os.remove(save_path_tmp)
-    os.remove(save_path_crop_tmp)
-    os.remove(save_path_crop_audio)
+        video_options = ["-c:v", "libx264", "-crf", "16", "-preset", "medium"]
+
+    command = [
+        "ffmpeg", "-loglevel", "error", "-y",
+        "-f", "rawvideo", "-pix_fmt", "rgb24",
+        "-video_size", f"{width}x{height}", "-framerate", str(fps),
+        "-i", "pipe:0", "-i", audio_path,
+        "-t", f"{frame_count / fps:.9f}",
+        "-map", "0:v:0", "-map", "1:a:0",
+        *video_options, "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-shortest", output_path,
+    ]
+    process = subprocess.Popen(command, stdin=subprocess.PIPE)
+    try:
+        for start in range(0, frame_count, 16):
+            process.stdin.write(memoryview(video[start:start + 16]).cast("B"))
+        process.stdin.close()
+        return_code = process.wait()
+    except BaseException:
+        process.kill()
+        process.wait()
+        raise
+    if return_code:
+        raise subprocess.CalledProcessError(return_code, command)

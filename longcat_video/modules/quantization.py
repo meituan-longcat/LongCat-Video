@@ -237,3 +237,66 @@ def load_quantized_dit(checkpoint_dir: str, subfolder: str = "base_model_int8", 
                 param.data = param.data.to(torch.bfloat16)
 
     return model
+
+
+DEFAULT_FP8_FFN_BLOCKS = (
+    6, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+    36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+)
+
+
+class _CachedFP8Linear(nn.Module):
+    """Transformer Engine Linear with inference weight caching."""
+
+    def __init__(self, source: nn.Linear):
+        super().__init__()
+        import transformer_engine.pytorch as te
+
+        self.linear = te.Linear(
+            source.in_features,
+            source.out_features,
+            bias=source.bias is not None,
+            params_dtype=source.weight.dtype,
+            device=source.weight.device,
+        )
+        with torch.no_grad():
+            self.linear.weight.copy_(source.weight)
+            if source.bias is not None:
+                self.linear.bias.copy_(source.bias)
+        self._first_microbatch = True
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        output = self.linear(x, is_first_microbatch=self._first_microbatch)
+        self._first_microbatch = False
+        return output
+
+
+def enable_fp8_ffn(dit: nn.Module, block_ids=DEFAULT_FP8_FFN_BLOCKS):
+    """Use TE FP8 for calibrated FFN input projections; keep sensitive paths in BF16."""
+    import transformer_engine.pytorch as te
+    from transformer_engine.common import recipe as te_recipe
+
+    block_ids = tuple(sorted(set(block_ids)))
+    if not block_ids or block_ids[0] < 0 or block_ids[-1] >= len(dit.blocks):
+        raise ValueError(f"Invalid FP8 FFN block ids: {block_ids}")
+
+    for block_id in block_ids:
+        ffn = dit.blocks[block_id].ffn
+        if not isinstance(ffn.w1, nn.Linear) or not isinstance(ffn.w3, nn.Linear):
+            raise TypeError("FP8 FFN requires BF16 nn.Linear weights; INT8 and FP8 cannot be combined")
+        ffn.w1 = _CachedFP8Linear(ffn.w1)
+        ffn.w3 = _CachedFP8Linear(ffn.w3)
+
+    recipe = te_recipe.DelayedScaling(
+        fp8_format=te_recipe.Format.E4M3,
+        amax_history_len=16,
+        amax_compute_algo="max",
+    )
+    bf16_forward = dit.forward
+
+    def fp8_forward(*args, **kwargs):
+        with te.fp8_autocast(enabled=True, fp8_recipe=recipe):
+            return bf16_forward(*args, **kwargs)
+    dit.forward = fp8_forward
+    return block_ids

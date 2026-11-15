@@ -11,7 +11,7 @@ pyloudnorm==0.1.1
 nvidia-ml-py==13.580.65
 tzdata==2025.2
 onnx==1.18.0
-onnxruntime==1.16.3
+onnxruntime-gpu==1.20.2
 tritonserverclient==0.0.6
 openai==1.75.0
 numpy==1.26.4

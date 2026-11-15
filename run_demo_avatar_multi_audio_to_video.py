@@ -19,7 +19,7 @@ from longcat_video.pipeline_longcat_video_avatar import LongCatVideoAvatarPipeli
 from longcat_video.modules.scheduling_flow_match_euler_discrete import FlowMatchEulerDiscreteScheduler
 from longcat_video.modules.autoencoder_kl_wan import AutoencoderKLWan
 from longcat_video.modules.avatar.longcat_video_dit_avatar import LongCatVideoAvatarTransformer3DModel
-from longcat_video.modules.quantization import load_quantized_dit
+from longcat_video.modules.quantization import enable_fp8_ffn, load_quantized_dit
 from longcat_video.context_parallel import context_parallel_util
 
 # -------- avatar related --------
@@ -27,6 +27,7 @@ import librosa
 import soundfile as sf
 from longcat_video.audio_process import get_audio_encoder, get_audio_feature_extractor
 from longcat_video.audio_process.torch_utils import save_video_ffmpeg
+from longcat_video.audio_process.vocal_separator import separate_vocals
 from audio_separator.separator import Separator
 
 
@@ -40,29 +41,18 @@ def generate_random_uid():
     uid = timestamp_part + random_part
     return uid
 
-def extract_vocal_from_speech(source_path, target_path, vocal_separator, audio_output_dir_temp):
+def extract_vocal_from_speech(source_path, vocal_separator, duration):
     if source_path is None:
         return None
+    speech_array, _ = separate_vocals(vocal_separator, source_path, duration=duration)
+    return speech_array
 
-    outputs = vocal_separator.separate(source_path)
-    if len(outputs) <= 0:
-        print("Audio separate failed. Using raw audio.")
-        return None
-        
-    default_vocal_path = audio_output_dir_temp / "vocals" / outputs[0]
-    default_vocal_path = default_vocal_path.resolve().as_posix()
-    cmd = f"mv '{default_vocal_path}' '{target_path}'"
-    os.system(cmd)    
-    return target_path
-
-def audio_prepare_multi(left_temp_vocal_path, right_temp_vocal_path, generate_duration, left_raw_speech_path, right_raw_speech_path, sample_rate=16000, audio_type='para'):
-    left_speech_array, right_speech_array = None, None
-    if left_temp_vocal_path is not None:
-        left_speech_array, sr = librosa.load(left_temp_vocal_path, sr=sample_rate)
+def audio_prepare_multi(left_speech_array, right_speech_array, generate_duration, left_raw_speech_path, right_raw_speech_path, sample_rate=16000, audio_type='para'):
+    sr = sample_rate
+    if left_speech_array is not None:
         left_raw_speech_array, _ = librosa.load(left_raw_speech_path, sr=sample_rate) 
     
-    if right_temp_vocal_path is not None:
-        right_speech_array, sr = librosa.load(right_temp_vocal_path, sr=sample_rate)
+    if right_speech_array is not None:
         right_raw_speech_array, _ = librosa.load(right_raw_speech_path, sr=sample_rate) 
     
     if left_speech_array is None:
@@ -79,9 +69,16 @@ def audio_prepare_multi(left_temp_vocal_path, right_temp_vocal_path, generate_du
         merge_raw_speech = np.concatenate([left_raw_speech_array, np.zeros_like(right_raw_speech_array)]) + \
                             np.concatenate([np.zeros_like(left_raw_speech_array), right_raw_speech_array])
     elif audio_type == 'para':
-        left_speech_array_ext = left_speech_array
-        right_speech_array_ext = right_speech_array
-        merge_raw_speech = left_raw_speech_array + right_raw_speech_array
+        aligned_length = min(
+            len(left_speech_array), len(right_speech_array),
+            len(left_raw_speech_array), len(right_raw_speech_array),
+        )
+        if aligned_length == 0:
+            raise ValueError("Cannot align empty audio arrays for parallel mixing")
+        left_speech_array_ext = left_speech_array[:aligned_length]
+        right_speech_array_ext = right_speech_array[:aligned_length]
+        merge_raw_speech = (left_raw_speech_array[:aligned_length]
+                            + right_raw_speech_array[:aligned_length])
     else:
         raise NotImplementedError(f"Unsupported audio_type of {audio_type}")
     
@@ -93,6 +90,7 @@ def audio_prepare_multi(left_temp_vocal_path, right_temp_vocal_path, generate_du
     if added_sample_nums > 0:
         left_speech_array_ext  = np.append(left_speech_array_ext, [0.]*added_sample_nums)
         right_speech_array_ext = np.append(right_speech_array_ext, [0.]*added_sample_nums)
+        merge_raw_speech = np.append(merge_raw_speech, [0.]*added_sample_nums)
 
     return left_speech_array_ext, right_speech_array_ext, merge_raw_speech
         
@@ -109,7 +107,8 @@ def generate(args):
     resolution = args.resolution
     num_segments = max(1, args.num_segments)
     output_dir = args.output_dir
-    model_type = args.model_type
+    model_type = "avatar-v1.5" if args.model_type == "avatar-v1.6" else args.model_type
+    use_loudness_norm = args.model_type != "avatar-v1.6"
     use_distill = args.use_distill
     use_int8 = args.use_int8
 
@@ -187,11 +186,50 @@ def generate(args):
             dit = load_quantized_dit(checkpoint_dir, subfolder="base_model_int8", cp_split_hw=cp_split_hw)
         else:
             dit = LongCatVideoAvatarTransformer3DModel.from_pretrained(checkpoint_dir, subfolder="base_model", cp_split_hw=cp_split_hw, torch_dtype=torch.bfloat16)
+        dit = dit.to(local_rank)
         if use_distill:
-            distill_checkpoint_path = os.path.join(checkpoint_dir, 'lora', f'dmd_lora.safetensors')
-            if os.path.exists(distill_checkpoint_path):
-                dit.load_lora(distill_checkpoint_path, "dmd", multiplier=1.0, lora_network_dim=128, lora_network_alpha=64)
-                dit.enable_loras(["dmd"])
+            if args.mix_steps > 0:
+                dmd_lora_path = os.path.join(checkpoint_dir, "loraA", "lora.safetensors")
+                opsd_lora_path = os.path.join(checkpoint_dir, "loraB", "lora.safetensors")
+                missing_paths = [
+                    path
+                    for path in (dmd_lora_path, opsd_lora_path)
+                    if not os.path.isfile(path)
+                ]
+                if missing_paths:
+                    raise FileNotFoundError(f"Mixing LoRA not found: {missing_paths}")
+                print(f"[INFO] Loading mixed LoRAs: DMD={dmd_lora_path}, OPSD={opsd_lora_path}")
+                dit.load_lora(dmd_lora_path, "dmd", multiplier=1.0, lora_network_dim=128, lora_network_alpha=64)
+                dit.load_lora(opsd_lora_path, "opsd", multiplier=1.0, lora_network_dim=128, lora_network_alpha=64)
+                dit.enable_lora_mix("dmd", "opsd", args.mix_alpha, args.mix_steps)
+            else:
+                distill_checkpoint_path = (
+                    args.lora_path if os.path.isabs(args.lora_path)
+                    else os.path.join(checkpoint_dir, args.lora_path)
+                )
+                if not os.path.isfile(distill_checkpoint_path):
+                    raise FileNotFoundError(f"Distillation LoRA not found: {distill_checkpoint_path}")
+                print(f"[INFO] Statically merging distillation LoRA: {distill_checkpoint_path}")
+                merged_count = dit.merge_lora(distill_checkpoint_path, lora_key="dmd", multiplier=args.lora_multiplier, lora_network_dim=128, lora_network_alpha=64)
+                print(f"[INFO] Statically merged LoRA into {merged_count} Linear modules: multiplier={args.lora_multiplier}")
+
+    if args.use_fp8:
+        fp8_blocks = enable_fp8_ffn(dit)
+        if local_rank == 0:
+            print(f"[INFO] TE FP8 enabled for FFN w1/w3 in blocks {list(fp8_blocks)}")
+
+    if args.compile_dit:
+        torch._dynamo.config.cache_size_limit = 128
+        torch._dynamo.config.accumulated_cache_size_limit = 1024
+        if local_rank == 0:
+            print("[INFO] Compiling DiT transformer blocks (CUDA graphs off)")
+        for block_idx, block in enumerate(dit.blocks):
+            dit.blocks[block_idx] = torch.compile(
+                block,
+                fullgraph=False,
+                dynamic=False,
+                options={"triton.cudagraphs": False, "epilogue_fusion": False, "emulate_precision_casts": True},
+            )
 
     # initialize audio models
     if model_type == "avatar-v1.0":
@@ -212,6 +250,13 @@ def generate(args):
         output_single_stem="vocals",
         model_file_dir=audio_separator_model_path,
     )
+    if vocal_separator.onnx_execution_provider == ["CUDAExecutionProvider"]:
+        vocal_separator.onnx_execution_provider = [
+            (
+                "CUDAExecutionProvider",
+                {"device_id": local_rank, "cudnn_conv_algo_search": "HEURISTIC"},
+            )
+        ]
     vocal_separator.load_model(audio_separator_model_name)
 
     
@@ -228,6 +273,27 @@ def generate(args):
     )
     pipe.to(local_rank)
 
+    if args.compile_vae:
+        if local_rank == 0:
+            print("[INFO] Compiling optimized VAE encoder and decoder (cuDNN autotune on, CUDA graphs off)")
+        torch.backends.cudnn.benchmark = True
+        pipe.vae.enable_encoder_fused_padding()
+        pipe.vae.enable_encoder_cache_views()
+        pipe.vae.enable_decoder_fused_padding()
+        pipe.vae.enable_decoder_cache_views()
+        pipe.vae.encoder = torch.compile(
+            pipe.vae.encoder,
+            fullgraph=False,
+            dynamic=False,
+            options={"triton.cudagraphs": False},
+        )
+        pipe.vae.decoder = torch.compile(
+            pipe.vae.decoder,
+            fullgraph=False,
+            dynamic=False,
+            options={"triton.cudagraphs": False},
+        )
+
     global_seed = 42
     seed = global_seed + global_rank
 
@@ -237,24 +303,32 @@ def generate(args):
     if cp_rank == 0:
         # extract vocal
         sr = 16000
-        left_temp_vocal_path  = os.path.join(audio_output_dir_temp, f"{generate_random_uid()}_left_temp_vocal.wav")
-        right_temp_vocal_path = os.path.join(audio_output_dir_temp, f"{generate_random_uid()}_right_temp_vocal.wav")
-        left_temp_vocal_path = extract_vocal_from_speech(left_raw_speech_path, left_temp_vocal_path, vocal_separator, audio_output_dir_temp)
-        right_temp_vocal_path = extract_vocal_from_speech(right_raw_speech_path, right_temp_vocal_path, vocal_separator, audio_output_dir_temp)
+        generate_duration = num_frames / save_fps + (num_segments-1) * (num_frames-num_cond_frames) / save_fps
+        audio_process_duration = generate_duration + 1.0
+        left_speech_array = extract_vocal_from_speech(left_raw_speech_path, vocal_separator, audio_process_duration)
+        right_speech_array = extract_vocal_from_speech(right_raw_speech_path, vocal_separator, audio_process_duration)
         
         # prepare each vocal and synthesize the sum audio
-        generate_duration = num_frames / save_fps + (num_segments-1) * (num_frames-num_cond_frames) / save_fps
-        left_speech_array_ext, right_speech_array_ext, merge_speech = audio_prepare_multi(left_temp_vocal_path, right_temp_vocal_path, generate_duration, \
+        left_speech_array_ext, right_speech_array_ext, merge_speech = audio_prepare_multi(left_speech_array, right_speech_array, audio_process_duration, \
                                                                                             left_raw_speech_path, right_raw_speech_path, sample_rate=sr, audio_type=audio_type)
         merge_speech_path = f"/tmp/temp_speech_{generate_random_uid()}_{global_rank}_merge.wav"
         sf.write(merge_speech_path, merge_speech, 16000)
 
-        left_full_audio_emb = pipe.get_audio_embedding(left_speech_array_ext, fps=save_fps*audio_stride, device=local_rank, sample_rate=sr, model_type=model_type) 
-        right_full_audio_emb = pipe.get_audio_embedding(right_speech_array_ext, fps=save_fps*audio_stride, device=local_rank, sample_rate=sr, model_type=model_type) 
+        left_full_audio_emb = pipe.get_audio_embedding(
+            left_speech_array_ext, fps=save_fps*audio_stride, device=local_rank, sample_rate=sr,
+            model_type=model_type, use_loudness_norm=use_loudness_norm
+        )
+        right_full_audio_emb = pipe.get_audio_embedding(
+            right_speech_array_ext, fps=save_fps*audio_stride, device=local_rank, sample_rate=sr,
+            model_type=model_type, use_loudness_norm=use_loudness_norm
+        )
         if torch.isnan(left_full_audio_emb).any() or torch.isnan(right_full_audio_emb).any():
             raise ValueError(f"broken audio embedding with nan values")
         if use_background_silent_audio:
-            back_full_audio_emb = pipe.get_audio_embedding(np.zeros_like(left_speech_array_ext), fps=save_fps*audio_stride, device=local_rank, sample_rate=sr, model_type=model_type)
+            back_full_audio_emb = pipe.get_audio_embedding(
+                np.zeros_like(left_speech_array_ext), fps=save_fps*audio_stride, device=local_rank,
+                sample_rate=sr, model_type=model_type, use_loudness_norm=use_loudness_norm
+            )
         assert left_full_audio_emb.shape == right_full_audio_emb.shape, f"Inconsistent audio embedding shape."
         if use_background_silent_audio:
             assert left_full_audio_emb.shape == back_full_audio_emb.shape, f"Inconsistent audio embedding shape between speaker and background."
@@ -268,10 +342,6 @@ def generate(args):
             if use_background_silent_audio:
                 context_parallel_util.cp_broadcast(back_full_audio_emb)
         
-        if left_temp_vocal_path is not None and os.path.exists(left_temp_vocal_path):
-            os.remove(left_temp_vocal_path)
-        if right_temp_vocal_path is not None and os.path.exists(right_temp_vocal_path):
-            os.remove(right_temp_vocal_path)
 
     elif context_parallel_util.get_cp_size() > 1:
         full_audio_emb_tensor_shape_list = torch.zeros(3, dtype=torch.int64, device=local_rank)
@@ -357,12 +427,12 @@ def generate(args):
     )
     output, latent = output_tuple 
     output = output[0]
-    video = [(output[i] * 255).astype(np.uint8) for i in range(output.shape[0])]
-    video = [PIL.Image.fromarray(img) for img in video]
+    video_array = (output * 255).astype(np.uint8)
+    video = [PIL.Image.fromarray(img) for img in video_array]
 
-    if cp_rank == 0:
-        output_tensor = torch.from_numpy(np.array(video))
-        save_video_ffmpeg(output_tensor, os.path.join(output_dir, "ai2v_demo_1"), merge_speech_path, fps=save_fps, quality=5)
+    if cp_rank == 0 and (args.save_every_segment or num_segments == 1):
+        output_tensor = torch.from_numpy(video_array)
+        save_video_ffmpeg(output_tensor, os.path.join(output_dir, "ai2v_demo_1"), merge_speech_path, fps=save_fps, quality=10)
     del output
     torch_gc()
 
@@ -379,7 +449,10 @@ def generate(args):
     width, height = video[0].size
     current_video = video
     ref_latent = latent[:, :, :1].clone()
-    all_generated_frames = video
+    total_output_frames = len(video_array) + max(0, num_segments - 1) * (num_frames - num_cond_frames)
+    all_generated_frames = np.empty((total_output_frames, height, width, 3), dtype=np.uint8)
+    generated_frame_count = len(video_array)
+    all_generated_frames[:generated_frame_count] = video_array
 
     for segment_idx in range(1, num_segments):
         if local_rank == 0:
@@ -411,7 +484,7 @@ def generate(args):
             audio_guidance_scale=audio_guidance_scale,
             generator=generator,
             output_type='both',
-            use_kv_cache=True,
+            use_kv_cache=args.mix_steps == 0,
             offload_kv_cache=False,
             enhance_hf=True if not use_distill else False,
             audio_emb=audio_embs,
@@ -424,17 +497,20 @@ def generate(args):
         output, latent = output_tuple
 
         output = output[0]
-        new_video = [(output[i] * 255).astype(np.uint8) for i in range(output.shape[0])]
-        new_video = [PIL.Image.fromarray(img) for img in new_video]
+        new_video_array = (output * 255).astype(np.uint8)
+        new_video = [PIL.Image.fromarray(img) for img in new_video_array]
         del output
 
-        all_generated_frames.extend(new_video[num_cond_frames:])
+        appended_frames = new_video_array[num_cond_frames:]
+        next_frame_count = generated_frame_count + len(appended_frames)
+        all_generated_frames[generated_frame_count:next_frame_count] = appended_frames
+        generated_frame_count = next_frame_count
 
         current_video = new_video
 
-        if cp_rank == 0:
-            output_tensor = torch.from_numpy(np.array(all_generated_frames))
-            save_video_ffmpeg(output_tensor, os.path.join(output_dir, f"video_continue_{segment_idx+1}"), merge_speech_path, fps=save_fps, quality=5)
+        if cp_rank == 0 and (args.save_every_segment or segment_idx == num_segments - 1):
+            output_tensor = torch.from_numpy(all_generated_frames[:generated_frame_count])
+            save_video_ffmpeg(output_tensor, os.path.join(output_dir, f"video_continue_{segment_idx+1}"), merge_speech_path, fps=save_fps, quality=10)
             del output_tensor
     
     if cp_rank == 0 and os.path.exists(merge_speech_path):
@@ -466,6 +542,11 @@ def _parse_args():
         default=1
     )
     parser.add_argument(
+        '--save_every_segment',
+        action='store_true',
+        help='Save cumulative video after every segment; by default only the final video is saved.',
+    )
+    parser.add_argument(
         '--num_inference_steps',
         type=int,
         default=50
@@ -478,7 +559,7 @@ def _parse_args():
     parser.add_argument(
         '--mask_frame_range',
         type=int,
-        default=3
+        default=0
     )
     parser.add_argument(
         '--text_guidance_scale',
@@ -511,12 +592,64 @@ def _parse_args():
         action='store_true',
     )
     parser.add_argument(
+        "--lora_path",
+        type=str,
+        default="lora/dmd_lora.safetensors",
+        help="Distillation LoRA path. Relative paths are resolved under checkpoint_dir.",
+    )
+    parser.add_argument(
+        "--lora_multiplier",
+        type=float,
+        default=0.8,
+        help="Multiplier used when statically merging the distillation LoRA.",
+    )
+    parser.add_argument(
+        "--mix_steps",
+        type=int,
+        default=3,
+        help="Leading denoising steps using alpha*DMD + (1-alpha)*OPSD for avatar-v1.6.",
+    )
+    parser.add_argument(
+        "--mix_alpha",
+        type=float,
+        default=0.5,
+        help="DMD weight used during mixed denoising for avatar-v1.6.",
+    )
+    parser.add_argument(
         "--use_int8",
         action='store_true',
         help="Load INT8 quantized DiT model for reduced VRAM usage"
     )
+    parser.add_argument(
+        "--use_fp8",
+        action="store_true",
+        help="Use calibrated Transformer Engine FP8 for selected DiT FFN projections.",
+    )
+    parser.add_argument(
+        "--compile_dit",
+        action="store_true",
+        help="Compile DiT transformer blocks for lower denoising latency.",
+    )
+    parser.add_argument(
+        "--compile_vae",
+        action="store_true",
+        help="Compile the VAE encoder and decoder with cuDNN autotuning, fused padding, and zero-copy cache views.",
+    )
 
     args = parser.parse_args()
+    if args.use_fp8 and args.use_int8:
+        parser.error("--use_fp8 cannot be combined with --use_int8")
+    if args.use_fp8 and args.model_type != "avatar-v1.6":
+        parser.error("--use_fp8 is calibrated only for --model_type avatar-v1.6")
+    if args.model_type in ("avatar-v1.0", "avatar-v1.5"):
+        args.mix_steps = 0
+        args.mix_alpha = 0.0
+    elif not 0 <= args.mix_steps <= 8:
+        parser.error("--mix_steps must be in [0, 8]")
+    elif not 0.0 <= args.mix_alpha <= 1.0:
+        parser.error("--mix_alpha must be in [0, 1]")
+    if args.model_type == "avatar-v1.6" and args.mix_steps > 0 and not args.use_distill:
+        parser.error("--mix_steps requires --use_distill")
 
     return args
 

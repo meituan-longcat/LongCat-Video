@@ -290,6 +290,8 @@ class LongCatVideoAvatarTransformer3DModel(
 
         self.lora_dict = {}
         self.active_loras = []
+        self.lora_mix_config = None
+        self._lora_mix_active = None
     
     def load_lora(self, lora_path, lora_key, multiplier=1.0, lora_network_dim=128, lora_network_alpha=64):
         lora_network_state_dict_loaded = load_file(lora_path, device="cpu")
@@ -304,6 +306,88 @@ class LongCatVideoAvatarTransformer3DModel(
         lora_network.load_state_dict(lora_network_state_dict_loaded, strict=True)
         
         self.lora_dict[lora_key] = lora_network
+
+    def merge_lora(self, lora_path, lora_key="merged", multiplier=0.8, lora_network_dim=128, lora_network_alpha=64):
+        if lora_key in self.lora_dict:
+            raise KeyError(f"LoRA key already loaded: {lora_key}")
+        self.load_lora(
+            lora_path,
+            lora_key,
+            multiplier=multiplier,
+            lora_network_dim=lora_network_dim,
+            lora_network_alpha=lora_network_alpha,
+        )
+        lora_network = self.lora_dict.pop(lora_key)
+
+        targets = []
+        for lora in lora_network.loras:
+            module_name = lora.lora_name.replace("lora___lorahyphen___", "").replace("___lorahyphen___", ".")
+            module = self._get_module_by_name(module_name)
+            if module.__class__.__name__ != "Linear":
+                raise TypeError(f"Static LoRA target must be Linear, got {module.__class__.__name__}: {module_name}")
+            targets.append((module, lora))
+        if not targets:
+            raise RuntimeError(f"No LoRA modules found in {lora_path}")
+
+        with torch.no_grad():
+            for module, lora in targets:
+                origin_dtype = module.weight.dtype
+                origin_device = module.weight.device
+                module.to(device=origin_device, dtype=torch.float32)
+                lora.to(device=origin_device, dtype=torch.float32)
+
+                down = lora.lora_down.weight
+                if hasattr(lora.lora_up, "blocks"):
+                    down_chunks = torch.chunk(down, len(lora.lora_up.blocks), dim=0)
+                    delta = torch.cat([
+                        torch.mm(block.weight, down_chunks[index])
+                        for index, block in enumerate(lora.lora_up.blocks)
+                    ], dim=0)
+                else:
+                    delta = torch.mm(lora.lora_up.weight, down)
+
+                scale = lora.multiplier * float(lora.alpha_scale.float().item())
+                module.weight.data += scale * delta
+                module.to(device=origin_device, dtype=origin_dtype)
+
+        return len(targets)
+
+    def enable_lora_mix(self, dmd_key, opsd_key, mix_alpha, mix_steps):
+        if not 0.0 <= mix_alpha <= 1.0:
+            raise ValueError(f"mix_alpha must be in [0, 1], got {mix_alpha}")
+        missing_keys = [key for key in (dmd_key, opsd_key) if key not in self.lora_dict]
+        if missing_keys:
+            raise KeyError(f"LoRA keys not loaded: {missing_keys}")
+
+        self.enable_loras([dmd_key, opsd_key])
+        self.lora_mix_config = {
+            "dmd_key": dmd_key,
+            "opsd_key": opsd_key,
+            "mix_alpha": mix_alpha,
+            "mix_steps": mix_steps,
+        }
+        self._lora_mix_active = None
+        self.set_lora_mix_step(0)
+
+    def set_lora_mix_step(self, step_index):
+        if self.lora_mix_config is None:
+            return
+
+        is_mixed = step_index < self.lora_mix_config["mix_steps"]
+        if is_mixed == self._lora_mix_active:
+            return
+
+        dmd_network = self.lora_dict[self.lora_mix_config["dmd_key"]]
+        opsd_network = self.lora_dict[self.lora_mix_config["opsd_key"]]
+        alpha = self.lora_mix_config["mix_alpha"]
+        dmd_multiplier = alpha if is_mixed else 0.0
+        opsd_multiplier = 1.0 - alpha if is_mixed else 1.0
+
+        dmd_network.set_multiplier(dmd_multiplier)
+        dmd_network.set_use_lora(dmd_multiplier != 0.0)
+        opsd_network.set_multiplier(opsd_multiplier)
+        opsd_network.set_use_lora(opsd_multiplier != 0.0)
+        self._lora_mix_active = is_mixed
 
     def enable_loras(self, lora_key_list=[]):
         self.disable_all_loras()
