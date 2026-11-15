@@ -5,7 +5,7 @@ soundfile==0.13.1
 soxr==0.5.0.post1
 librosa==0.11.0
 libsndfile1==0.0.1
-sympy==1.13.1
+sympy==1.13.3
 audio-separator==0.30.2
 pyloudnorm==0.1.1
 nvidia-ml-py==13.580.65
