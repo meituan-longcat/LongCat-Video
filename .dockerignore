@@ -1,0 +1,7 @@
+weights/
+output/
+.git/
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
