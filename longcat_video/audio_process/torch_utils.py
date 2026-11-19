@@ -53,7 +53,8 @@ def calculate_x_ref_attn_map(noise_q, ref_k, ref_target_masks, attn_bias=None):
         ref_target_mask = ref_target_mask[None, None, None, ...]
         x_ref_attn_map = x_ref_attn_map_source.clone()
         x_ref_attn_map = x_ref_attn_map * ref_target_mask
-        x_ref_attn_map = x_ref_attn_map.sum(-1) / ref_target_mask.sum() 
+        # A region can disappear after the reference mask is resized to token resolution.
+        x_ref_attn_map = x_ref_attn_map.sum(-1) / ref_target_mask.sum().clamp_min(1)
         x_ref_attn_map = x_ref_attn_map.permute(0, 2, 1) 
         x_ref_attn_map = x_ref_attn_map.mean(-1) 
         
