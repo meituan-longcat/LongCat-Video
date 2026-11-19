@@ -188,7 +188,8 @@ def save_video_ffmpeg(gen_video_samples, save_path, audio_path, fps=25, quality=
         "-t", f"{frame_count / fps:.9f}",
         "-map", "0:v:0", "-map", "1:a:0",
         *video_options, "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-shortest", output_path,
+        # Preserve the generated frame count when the source audio ends early.
+        "-af", "apad", "-c:a", "aac", "-shortest", output_path,
     ]
     process = subprocess.Popen(command, stdin=subprocess.PIPE)
     try:
