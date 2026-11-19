@@ -61,8 +61,10 @@ def _demix_batched(model, mix, batch_size):
                 divider[..., start:end] += 1
             result[..., start:end] += chunk_result
 
-    source = (result / divider)[0, :, model.trim : -model.trim]
-    source = source[:, : mix.shape[-1]]
+    sample_slice = slice(model.trim, model.trim + mix.shape[-1])
+    source = result[0, :, sample_slice]
+    weights = divider[0, :, sample_slice]
+    np.divide(source, weights, out=source, where=weights > 0)
     source *= model.compensate
     return source
 
