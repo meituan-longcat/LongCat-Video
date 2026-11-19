@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from tqdm import tqdm 
 from PIL import Image
 from diffusers.video_processor import VideoProcessor
+from diffusers.utils.torch_utils import randn_tensor
 from diffusers.image_processor import PipelineImageInput
 from transformers import AutoTokenizer, UMT5EncoderModel
 
@@ -248,7 +249,7 @@ class LongCatVideoPipeline:
                 )
 
             # Generate random noise with shape latent_shape
-            latents = torch.randn(shape, generator=generator, device=device, dtype=dtype)
+            latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
 
         if image is not None or video is not None:
             if isinstance(generator, list):
