@@ -64,10 +64,13 @@ def audio_prepare_multi(left_speech_array, right_speech_array, generate_duration
         right_raw_speech_array = np.zeros_like(left_raw_speech_array)
     
     if audio_type == 'add':
-        left_speech_array_ext = np.concatenate([left_speech_array, np.zeros_like(right_speech_array)])
-        right_speech_array_ext = np.concatenate([np.zeros_like(left_speech_array), right_speech_array])
-        merge_raw_speech = np.concatenate([left_raw_speech_array, np.zeros_like(right_raw_speech_array)]) + \
-                            np.concatenate([np.zeros_like(left_raw_speech_array), right_raw_speech_array])
+        # Conditioned speech can be shorter than its original recording.
+        # Use the same per-speaker boundary for conditioning and playback.
+        left_length = min(len(left_speech_array), len(left_raw_speech_array))
+        right_length = min(len(right_speech_array), len(right_raw_speech_array))
+        left_speech_array_ext = np.pad(left_speech_array[:left_length], (0, right_length))
+        right_speech_array_ext = np.pad(right_speech_array[:right_length], (left_length, 0))
+        merge_raw_speech = np.concatenate([left_raw_speech_array[:left_length], right_raw_speech_array[:right_length]])
     elif audio_type == 'para':
         aligned_length = min(
             len(left_speech_array), len(right_speech_array),
@@ -85,12 +88,12 @@ def audio_prepare_multi(left_speech_array, right_speech_array, generate_duration
     assert len(left_speech_array_ext) == len(right_speech_array_ext), f"The two speech lengths should be equal"
    
 
-    source_duraion = len(left_speech_array_ext) / sr
-    added_sample_nums = math.ceil((generate_duration - source_duraion) * sr)
+    added_sample_nums = math.ceil(generate_duration * sr) - len(left_speech_array_ext)
     if added_sample_nums > 0:
-        left_speech_array_ext  = np.append(left_speech_array_ext, [0.]*added_sample_nums)
-        right_speech_array_ext = np.append(right_speech_array_ext, [0.]*added_sample_nums)
-        merge_raw_speech = np.append(merge_raw_speech, [0.]*added_sample_nums)
+        padding = (0, added_sample_nums)
+        left_speech_array_ext = np.pad(left_speech_array_ext, padding)
+        right_speech_array_ext = np.pad(right_speech_array_ext, padding)
+        merge_raw_speech = np.pad(merge_raw_speech, padding)
 
     return left_speech_array_ext, right_speech_array_ext, merge_raw_speech
         
