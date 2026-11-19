@@ -1,5 +1,6 @@
 import os
 import tempfile
+from pathlib import Path
 
 import cv2
 import torch
@@ -231,9 +232,7 @@ def main():
                         torch_gc()
                 
                 elif mode == "i2v":
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
-                        image.save(tmp_file.name)
-                        input_image = load_image(tmp_file.name)
+                    input_image = load_image(image)
                     
                     if use_distill:
                         pipe.dit.enable_loras(['cfg_step_lora'])
@@ -270,10 +269,11 @@ def main():
                         torch_gc()
                 
                 elif mode == "vc":
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-                        tmp_file.write(uploaded_file.read())
-                        input_video = load_video(tmp_file.name)
-                        current_fps = get_fps(tmp_file.name)
+                    with tempfile.TemporaryDirectory() as tmp_dir:
+                        video_path = Path(tmp_dir) / 'input.mp4'
+                        video_path.write_bytes(uploaded_file.getbuffer())
+                        input_video = load_video(str(video_path))
+                        current_fps = get_fps(str(video_path))
                     
                     target_fps = 15
                     stride = max(1, round(current_fps / target_fps))
@@ -318,22 +318,21 @@ def main():
                         torch_gc()
             
             # Save and display result
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as output_file:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                output_path = Path(tmp_dir) / 'output.mp4'
                 fps = 30 if use_refine else 15
-                export_to_video(output, output_file.name, fps=fps)
-                
-                with result_placeholder.container():
-                    st.success("Generation complete!")
-                    st.video(output_file.name)
-                    
-                    # Provide download button
-                    with open(output_file.name, 'rb') as f:
-                        st.download_button(
-                            label="📥 Download Video",
-                            data=f.read(),
-                            file_name=f"generated_video_{mode}_{seed}.mp4",
-                            mime="video/mp4"
-                        )
+                export_to_video(output, str(output_path), fps=fps)
+                output_bytes = output_path.read_bytes()
+
+            with result_placeholder.container():
+                st.success("Generation complete!")
+                st.video(output_bytes)
+                st.download_button(
+                    label="📥 Download Video",
+                    data=output_bytes,
+                    file_name=f"generated_video_{mode}_{seed}.mp4",
+                    mime="video/mp4"
+                )
 
 
 if __name__ == "__main__":
